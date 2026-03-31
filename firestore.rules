@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Fonctions d'aide pour simplifier les règles
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        request.auth.token.email == 'yohannesende@gmail.com'
+      );
+    }
+
+    // 1. Profils Utilisateurs
+    match /users/{userId} {
+      allow read: if isSignedIn(); // Modifié pour que l'admin puisse lister les users
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin()) 
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid']);
+    }
+
+    // 2. CLIENTS (Ajouté pour corriger l'erreur stats/clients)
+    match /clients/{clientId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 3. MESSAGES & RAPPORTS
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+    
+    // 4. DEVIS
+    match /devis/{devisId} {
+      allow create: if true; 
+      allow read: if isAdmin();
+    }
+
+    // 5. SYSTÈME DE MAIL
+    match /mail/{mailId} {
+      allow create: if isAdmin();
+    }
+
+    // 6. Règle de secours (Match global pour tout le reste)
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

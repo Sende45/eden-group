@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  /* Couleurs de la charte Eden Group */
+  --color-eden-dark: #0F2A30;    /* Vert Abyssal */
+  --color-eden-emerald: #2D6A4F; /* Vert Émeraude */
+  --color-eden-gold: #B8976A;    /* Or / Sable */
+  --color-eden-orange: #E67E22;  /* Orange Brûlé */
+  
+  /* TYPOGRAPHIE */
+  --font-black-mango: "Cormorant Garamond", "Playfair Display", serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* ANIMATIONS PERSONNALISÉES */
+  --animate-pulse-slow: pulse-slow 10s infinite ease-in-out;
+  --animate-float: float 6s infinite ease-in-out;
+
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.25; transform: scale(1.05); }
+    50% { opacity: 0.35; transform: scale(1.1); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+}
+
+/* --- RÉGLAGES LUXE & LISSAGE --- */
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Rendu premium des polices */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Variables pour le Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: #FDFDFD;
+  color: var(--color-eden-dark);
+}
+
+/* --- CLASSES UTILITAIRES SPÉCIFIQUES --- */
+
+/* Applique la police de luxe sur tes titres */
+.font-black-mango {
+  font-family: var(--font-black-mango);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Barre de scroll personnalisée (plus fine et dorée) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-eden-gold);
+  border-radius: 10px;
+}
+
+/* Effet miroir sur les images premium */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+}
+
+/* Selection de texte aux couleurs Eden */
+::selection {
+  background-color: rgba(184, 151, 106, 0.3);
+  color: var(--color-eden-dark);
+}
+
+/* Perspective pour les animations 3D (utilisé dans le Dashboard Connected) */
+.perspective-1000 {
+  perspective: 1000px;
+}
