@@ -4,13 +4,13 @@ import {
     Plus, Image as ImageIcon, Send, Video, X, Camera, CheckCircle2, Clock, 
     Loader2, Home, ListCheck, Users, TrendingUp, Zap, LogOut, FileText, 
     CheckCircle, History, ExternalLink, Trash2, Search, Calendar, Phone,
-    Star, MessageSquare 
+    Star, MessageSquare, MapPin // Ajout de MapPin ici
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db, storage, auth } from '../firebase'; 
 import { 
     collection, addDoc, serverTimestamp, getDocs, query, where, 
-    orderBy, limit, doc, updateDoc, deleteDoc 
+    orderBy, limit, doc, updateDoc, deleteDoc, onSnapshot // AJOUT onSnapshot ici
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../context/AuthContext';
@@ -24,13 +24,14 @@ export default function DashboardAdmin() {
     const EMAILJS_CONFIG = {
         SERVICE_ID: "service_f8258dd",
         PUBLIC_KEY: "xX6MHYJpo5d9EY7MK",
-        TEMPLATE_DEVIS: "template_ujqrt4i",
-        TEMPLATE_RAPPORT: "template_fnbg1qe"
+        TEMPLATE_DEVIS: "template_ujqrt4i",  // Template pour le devis
+        TEMPLATE_RAPPORT: "template_fnbg1qe" // Template pour le compte rendu
     };
     
     // --- ÉTATS GÉNÉRAUX ---
     const [clients, setClients] = useState([]);
     const [stats, setStats] = useState({ totalToday: 0, lastReportTime: '--:--' });
+    const [unreadChats, setUnreadChats] = useState([]); // AJOUT : État pour les nouveaux messages
 
     // --- ÉTATS RAPPORT (EMPLOYÉS) ---
     const [loading, setLoading] = useState(false);
@@ -60,6 +61,13 @@ export default function DashboardAdmin() {
     const [history, setHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // --- FONCTION GPS (AJOUTÉ) ---
+    const openGpsItinerary = (address) => {
+        if (!address) return alert("L'adresse n'est pas renseignée.");
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+        window.open(url, '_blank');
+    };
 
     const getPoleBadgeStyle = (pole) => {
         switch (pole) {
@@ -99,6 +107,14 @@ export default function DashboardAdmin() {
             } catch (error) { console.error("Erreur Init:", error); }
         };
         fetchAdminData();
+
+        // AJOUT : Écouteur de messagerie temps réel pour l'admin
+        const unsubChats = onSnapshot(collection(db, "chats"), (snapshot) => {
+            const activeChats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setUnreadChats(activeChats);
+        });
+
+        return () => unsubChats();
     }, []);
 
     // --- LOGIQUE DEVIS ---
@@ -128,6 +144,7 @@ export default function DashboardAdmin() {
                 validatedAt: serverTimestamp() 
             });
 
+            // MODIFIÉ : Utilisation du Template DEVIS (template_ujqrt4i)
             const paramsDevis = {
                 client_email: devis.email,
                 client_name: devis.clientName || "Cher Client",
@@ -193,6 +210,7 @@ export default function DashboardAdmin() {
             });
 
             if (targetClient?.email) {
+                // MODIFIÉ : Utilisation du Template RAPPORT (template_fnbg1qe)
                 const paramsRapport = {
                     client_email: targetClient.email,
                     client_name: selectedClient,
@@ -261,13 +279,29 @@ export default function DashboardAdmin() {
                         </div>
                     </motion.div>
 
-                    <motion.button 
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                        onClick={handleLogout} 
-                        className="w-full md:w-auto flex items-center justify-center gap-3 px-6 md:px-8 py-3.5 md:py-4 bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl md:rounded-[1.5rem] text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all border border-red-500/10 shadow-lg"
-                    >
-                        <LogOut size={16} /> Déconnexion
-                    </motion.button>
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                        {/* AJOUT : Bouton Messagerie Directe avec badge de notification si nouveaux chats */}
+                        <motion.button 
+                            whileHover={{ scale: 1.05 }}
+                            onClick={() => navigate('/messages')}
+                            className="relative flex items-center justify-center gap-3 px-6 md:px-8 py-3.5 md:py-4 bg-eden-gold text-eden-dark rounded-2xl md:rounded-[1.5rem] text-[10px] md:text-[11px] font-black uppercase tracking-widest shadow-lg"
+                        >
+                            <MessageSquare size={18} /> Messagerie
+                            {unreadChats.length > 0 && (
+                                <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white animate-bounce">
+                                    {unreadChats.length}
+                                </span>
+                            )}
+                        </motion.button>
+
+                        <motion.button 
+                            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                            onClick={handleLogout} 
+                            className="w-full md:w-auto flex items-center justify-center gap-3 px-6 md:px-8 py-3.5 md:py-4 bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl md:rounded-[1.5rem] text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all border border-red-500/10 shadow-lg"
+                        >
+                            <LogOut size={16} /> Déconnexion
+                        </motion.button>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
@@ -311,7 +345,10 @@ export default function DashboardAdmin() {
                                         <motion.div layout key={d.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="p-4 md:p-5 bg-gray-50/50 rounded-2xl md:rounded-[2rem] border border-gray-100 group hover:border-eden-gold/30 hover:bg-white hover:shadow-xl transition-all">
                                             <div className="flex justify-between items-start mb-2">
                                                 <p className="text-[11px] md:text-[12px] font-black uppercase text-eden-dark truncate w-2/3 leading-tight">{d.clientName || d.email}</p>
-                                                <Calendar size={14} className="text-eden-gold" />
+                                                {/* BOUTON GPS INTÉGRÉ ICI */}
+                                                <button onClick={() => openGpsItinerary(d.localisation)} className="p-1.5 bg-white border border-gray-100 rounded-lg text-eden-gold hover:scale-110 transition-transform">
+                                                    <MapPin size={16} />
+                                                </button>
                                             </div>
                                             {d.appointmentDate && (
                                                 <div className="mb-3 p-2 bg-eden-gold/5 rounded-lg border border-eden-gold/10">

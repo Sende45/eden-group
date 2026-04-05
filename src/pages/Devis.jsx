@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Construction, Building2, UserCheck, MapPin, Ruler, ArrowLeft, Send, Loader2, Calendar, Phone, MessageCircle } from 'lucide-react';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { registerLocale } from  "react-datepicker";
+import { registerLocale } from "react-datepicker";
 import fr from 'date-fns/locale/fr';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -30,6 +30,12 @@ const Devis = () => {
     appointmentDate: null
   });
 
+  // --- NOUVEAU : Restriction des horaires (8h00 à 18h00) ---
+  const minTime = new Date();
+  minTime.setHours(8, 0, 0);
+  const maxTime = new Date();
+  maxTime.setHours(18, 0, 0);
+
   useEffect(() => {
     if (user) {
       setFormData(prev => ({ ...prev, email: user.email }));
@@ -40,7 +46,7 @@ const Devis = () => {
       const selectedPole = poles.find(p => p.id === typeParam);
       if (selectedPole) {
         setFormData(prev => ({ ...prev, pole: selectedPole.title }));
-        setStep(2); // Saute directement à l'étape 2 si un type est choisi
+        setStep(2);
       }
     }
   }, [searchParams, user]);
@@ -75,7 +81,7 @@ const Devis = () => {
     try {
       await addDoc(collection(db, "devis"), {
         ...formData,
-        appointmentDate: selectedDate,
+        appointmentDate: selectedDate, // On s'assure d'envoyer la date sélectionnée
         userId: user ? user.uid : 'anonyme',
         clientName: userData?.fullName || userData?.nom || 'Client',
         status: "nouveau",
@@ -83,7 +89,7 @@ const Devis = () => {
         createdAt: serverTimestamp()
       });
 
-      alert(`Votre demande a été transmise avec succès. La direction d'Eden Group étudiera votre dossier et vous transmettra un devis personnalisé par mail.`);
+      alert(`Votre demande a été transmise avec succès. La direction d'Eden Group étudiera votre dossier.`);
       setIsSubmitting(false);
       navigate(user ? '/dashboard' : '/');
     } catch (error) {
@@ -101,26 +107,44 @@ const Devis = () => {
 
   return (
     <div className="min-h-screen bg-eden-dark pt-24 md:pt-32 pb-10 md:pb-20 px-4 md:px-6 font-sans text-eden-dark">
+      {/* --- CSS PERSONNALISÉ POUR LE DATEPICKER --- */}
+      <style>{`
+        .react-datepicker {
+          font-family: inherit !important;
+          border-radius: 1.5rem !important;
+          border: none !important;
+          background: #f9fafb !important;
+        }
+        .react-datepicker__header {
+          background: #f9fafb !important;
+          border-bottom: 1px solid #e5e7eb !important;
+          border-radius: 1.5rem 1.5rem 0 0 !important;
+        }
+        .react-datepicker__day--selected {
+          background-color: #C5A059 !important; /* Doré Eden */
+          border-radius: 0.5rem !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li--selected {
+          background-color: #C5A059 !important;
+        }
+      `}</style>
+
       <div className="max-w-4xl mx-auto">
+        {/* Titre et étapes identiques... */}
         <div className="text-center mb-8 md:mb-12">
-          <motion.h1 
-            initial={{ opacity: 0, y: -20 }} 
-            animate={{ opacity: 1, y: 0 }}
-            className="font-black-mango text-3xl md:text-6xl text-white mb-4 leading-tight"
-          >
-            Demande de <span className="text-eden-gold italic">Devis</span>
-          </motion.h1>
-          {user && (
-            <p className="text-eden-gold/80 font-bold text-xs md:text-sm uppercase tracking-widest px-4">
-              Ravi de vous revoir, {userData?.fullName || user.email}
-            </p>
-          )}
+           <motion.h1 
+             initial={{ opacity: 0, y: -20 }} 
+             animate={{ opacity: 1, y: 0 }}
+             className="font-black-mango text-3xl md:text-6xl text-white mb-4 leading-tight"
+           >
+             Demande de <span className="text-eden-gold italic">Devis</span>
+           </motion.h1>
         </div>
 
         <div className="flex justify-center mb-8 md:mb-12 gap-2 px-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className={`h-1.5 flex-1 max-w-[100px] rounded-full transition-all duration-500 ${step >= i ? 'bg-eden-gold' : 'bg-gray-700'}`} />
-          ))}
+           {[1, 2, 3].map((i) => (
+             <div key={i} className={`h-1.5 flex-1 max-w-[100px] rounded-full transition-all duration-500 ${step >= i ? 'bg-eden-gold' : 'bg-gray-700'}`} />
+           ))}
         </div>
 
         <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-12 shadow-2xl relative overflow-hidden">
@@ -146,9 +170,9 @@ const Devis = () => {
             )}
 
             {step === 2 && (
-              <motion.div key="step2" {...stepVariants} className="space-y-6 md:space-y-8">
+               // ... Step 2 reste identique ...
+               <motion.div key="step2" {...stepVariants} className="space-y-6 md:space-y-8">
                 <h2 className="font-black-mango text-xl md:text-2xl">Détails de l'intervention pour <span className="text-eden-gold">{formData.pole}</span></h2>
-                
                 <div className="space-y-6 md:space-y-8">
                   <div className="bg-gray-50 p-4 md:p-6 rounded-2xl">
                     <label className="flex items-center gap-2 text-[10px] md:text-sm font-bold mb-4 uppercase tracking-widest text-gray-400">
@@ -167,7 +191,6 @@ const Devis = () => {
                       ))}
                     </div>
                   </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="bg-gray-50 p-4 md:p-6 rounded-2xl">
                       <label className="flex items-center gap-2 text-[10px] md:text-sm font-bold mb-6 uppercase tracking-widest text-gray-400">
@@ -180,7 +203,6 @@ const Devis = () => {
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-eden-gold"
                       />
                     </div>
-
                     <div className="bg-gray-50 p-4 md:p-6 rounded-2xl">
                       <label className="flex items-center gap-2 text-[10px] md:text-sm font-bold mb-4 uppercase tracking-widest text-gray-400">
                         <MapPin className="w-4 h-4 text-eden-gold" /> Localisation (Région)
@@ -198,17 +220,11 @@ const Devis = () => {
                     </div>
                   </div>
                 </div>
-
                 <div className="flex flex-col-reverse sm:flex-row justify-between gap-4 pt-4">
                   <button type="button" onClick={() => setStep(1)} className="text-gray-400 font-bold hover:text-eden-dark flex items-center justify-center gap-2 transition-colors py-2">
                     <ArrowLeft className="w-4 h-4" /> Retour
                   </button>
-                  <button 
-                    type="button"
-                    onClick={nextStep} 
-                    disabled={!formData.localisation} 
-                    className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 disabled:cursor-not-allowed transition-all w-full sm:w-auto"
-                  >
+                  <button type="button" onClick={nextStep} disabled={!formData.localisation} className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 transition-all w-full sm:w-auto">
                     Continuer
                   </button>
                 </div>
@@ -221,8 +237,8 @@ const Devis = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   <div className="space-y-4">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400">Choisir un créneau d'estimation</label>
-                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400 text-center block">Choisir un créneau d'estimation</label>
+                    <div className="p-4 bg-gray-50 rounded-3xl border border-gray-100 flex flex-col items-center shadow-inner">
                       <DatePicker
                         selected={selectedDate}
                         onChange={(date) => setSelectedDate(date)}
@@ -233,9 +249,11 @@ const Devis = () => {
                         timeCaption="Heure"
                         dateFormat="dd MMMM yyyy à HH:mm"
                         minDate={new Date()}
+                        // --- AJOUT DES RESTRICTIONS HORAIRES ---
+                        minTime={minTime}
+                        maxTime={maxTime}
                         locale="fr"
                         inline
-                        placeholderText="Sélectionnez une date"
                       />
                     </div>
                   </div>
@@ -265,7 +283,7 @@ const Devis = () => {
                         onChange={(e) => setFormData({...formData, email: e.target.value})} 
                       />
                       <textarea 
-                        placeholder="Détails supplémentaires (codes d'accès, besoins spécifiques...)" 
+                        placeholder="Détails supplémentaires..." 
                         className="w-full p-4 rounded-xl border border-gray-200 focus:border-eden-gold outline-none bg-gray-50 h-24 text-sm" 
                         value={formData.message} 
                         onChange={(e) => setFormData({...formData, message: e.target.value})} 

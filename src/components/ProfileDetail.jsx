@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { auth, db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { jsPDF } from "jspdf";
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { 
   User as UserIcon, 
   Mail, 
@@ -11,7 +14,8 @@ import {
   Camera, 
   Save,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  FileText
 } from 'lucide-react';
 
 const ProfileDetail = ({ userData }) => {
@@ -35,6 +39,65 @@ const ProfileDetail = ({ userData }) => {
       });
     }
   }, [userData]);
+
+  // FONCTION DE GÉNÉRATION DE FACTURE (Point 2)
+  const generateEDÈNInvoice = async (data) => {
+    try {
+      const docPDF = new jsPDF();
+      
+      // Design du Header PDF
+      docPDF.setFillColor(26, 32, 44); // Eden Dark
+      docPDF.rect(0, 0, 210, 40, 'F');
+      docPDF.setTextColor(197, 165, 114); // Eden Gold
+      docPDF.setFontSize(22);
+      docPDF.text("EDÈN GROUP", 20, 25);
+      
+      docPDF.setFontSize(8);
+      docPDF.setTextColor(255, 255, 255);
+      docPDF.text("L'EXCELLENCE DE LA PROPRETÉ", 20, 32);
+
+      // Corps du document
+      docPDF.setTextColor(0, 0, 0);
+      docPDF.setFontSize(12);
+      docPDF.text(`Facture N°: ${data.id}`, 20, 60);
+      docPDF.text(`Date: ${new Date().toLocaleDateString('fr-FR')}`, 20, 70);
+      docPDF.text(`Client: ${data.clientName}`, 20, 80);
+
+      docPDF.setDrawColor(197, 165, 114);
+      docPDF.line(20, 90, 190, 90);
+
+      docPDF.text("Détails de la prestation :", 20, 105);
+      docPDF.setFontSize(10);
+      docPDF.text(`${data.serviceType}`, 20, 115);
+      docPDF.setFontSize(12);
+      docPDF.text(`${data.amount} €`, 170, 115, { align: 'right' });
+
+      // Footer Légal France
+      docPDF.setFontSize(7);
+      docPDF.setTextColor(150, 150, 150);
+      docPDF.text("EDÈN GROUP - 17 Rue Boucherie Basse, 43000 Le Puy-en-Velay", 105, 280, { align: 'center' });
+      docPDF.text("SIRET: 989 398 839 - Entreprise Agréée Services à la Personne", 105, 285, { align: 'center' });
+
+      // Exportation Mobile via Capacitor
+      const pdfBase64 = docPDF.output('datauristring').split(',')[1];
+      const fileName = `Facture_EDEN_${Date.now()}.pdf`;
+
+      const savedFile = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+      });
+
+      await Share.share({
+        title: 'Facture EDÈN Group',
+        url: savedFile.uri,
+      });
+
+    } catch (error) {
+      console.error(error);
+      alert("Erreur lors de la génération du PDF.");
+    }
+  };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
@@ -67,9 +130,9 @@ const ProfileDetail = ({ userData }) => {
           <div className="absolute top-0 left-0 w-full h-1.5 md:h-2 bg-eden-gold" />
           <div className="relative z-10">
             <div className="w-20 h-20 md:w-24 md:h-24 bg-white/10 rounded-2xl md:rounded-3xl mx-auto mb-4 md:mb-6 flex items-center justify-center border border-white/10 relative group">
-              <UserIcon size={32} md={40} className="text-eden-gold" />
+              <UserIcon size={32} className="text-eden-gold" />
               <button className="absolute -bottom-2 -right-2 w-7 h-7 md:w-8 md:h-8 bg-eden-gold rounded-lg md:rounded-xl flex items-center justify-center text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all">
-                <Camera size={12} md={14} />
+                <Camera size={12} />
               </button>
             </div>
             <h3 className="font-black-mango text-xl md:text-2xl text-white mb-1 truncate px-2">
@@ -77,17 +140,27 @@ const ProfileDetail = ({ userData }) => {
             </h3>
             <p className="text-[9px] md:text-[10px] text-eden-gold uppercase tracking-[0.2em] md:tracking-[0.3em] font-bold">Membre Partenaire</p>
             
-            <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-white/5 space-y-3 md:space-y-4">
+            {/* BOUTON GÉNÉRER FACTURE */}
+            <div className="mt-8 pt-6 border-t border-white/5">
+              <button 
+                onClick={() => generateEDÈNInvoice({
+                  id: "2026-001",
+                  clientName: userData?.fullName || "Client",
+                  serviceType: "Prestation de Nettoyage de Luxe",
+                  amount: "150.00"
+                })}
+                className="w-full py-4 bg-white/5 hover:bg-eden-gold text-eden-gold hover:text-white border border-eden-gold/30 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all active:scale-95 group"
+              >
+                <FileText size={14} className="group-hover:rotate-12 transition-transform" />
+                Générer Facture
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-3 md:space-y-4">
               <div className="flex justify-between items-center text-[9px] md:text-[10px] uppercase tracking-widest">
                 <span className="text-gray-500">Statut Compte</span>
                 <span className="text-green-400 font-bold flex items-center gap-2">
                   <ShieldCheck size={12} /> Actif
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-[9px] md:text-[10px] uppercase tracking-widest">
-                <span className="text-gray-500">Adhésion</span>
-                <span className="text-white">
-                  {userData?.createdAt?.toDate ? userData.createdAt.toDate().toLocaleDateString('fr-FR') : "Février 2026"}
                 </span>
               </div>
             </div>
@@ -96,11 +169,11 @@ const ProfileDetail = ({ userData }) => {
 
         <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 border border-gray-100 shadow-xl">
           <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
-            <Award className="text-eden-gold" size={18} md={20} />
+            <Award className="text-eden-gold" size={18} />
             <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-eden-dark">Niveau d'Excellence</span>
           </div>
           <p className="text-[11px] md:text-xs text-gray-500 leading-relaxed font-light">
-            En tant que partenaire <span className="text-eden-dark font-bold">EDÈN Group</span>, vous bénéficiez d'un accès prioritaire au reporting et aux interventions d'urgence.
+            En tant que partenaire <span className="text-eden-dark font-bold">EDÈN Group</span>, vous bénéficiez d'un accès prioritaire aux interventions.
           </p>
         </div>
       </motion.div>

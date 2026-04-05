@@ -6,13 +6,14 @@ import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Import des pages
-import Portal from './pages/Portal'; // <--- AJOUT PORTAL
+import Portal from './pages/Portal'; 
 import Home from './pages/Home';
 import Devis from './pages/Devis';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Services from './pages/Services'; 
+import Messages from './pages/Messages'; // <--- AJOUT DE LA PAGE MESSAGERIE
 
 // Dashboards
 import EspaceClient from './pages/EspaceClient';
@@ -54,10 +55,11 @@ const ScrollToTop = () => {
 const LayoutWrapper = ({ children }) => {
   const location = useLocation();
   
-  // MODIF : On cache le Header/Footer sur le Portail ET sur les dashboards
   const isPortal = location.pathname === '/';
   const isDashboard = location.pathname.includes('dashboard');
-  const hideLayout = isPortal || isDashboard;
+  // MODIF : On cache aussi le Header/Footer sur la page Messages pour un look "App Mobile" plein écran
+  const isMessages = location.pathname === '/messages';
+  const hideLayout = isPortal || isDashboard || isMessages;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#FDFDFD] selection:bg-eden-gold/20 selection:text-eden-dark">
@@ -82,16 +84,26 @@ function App() {
       <AuthProvider>
         <LayoutWrapper>
           <Routes>
-            {/* PORTAL (Page d'entrée principale) */}
+            {/* PORTAL */}
             <Route path="/" element={<Portal />} />
 
             {/* Routes Publiques */}
-            <Route path="/accueil" element={<Home />} /> {/* Home déplacée ici */}
+            <Route path="/accueil" element={<Home />} />
             <Route path="/services" element={<Services />} /> 
             <Route path="/devis" element={<Devis />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+
+            {/* MESSAGERIE PROTÉGÉE (POINT 1) */}
+            <Route 
+              path="/messages" 
+              element={
+                <ProtectedRoute>
+                  <Messages />
+                </ProtectedRoute>
+              } 
+            />
 
             {/* Espace Privé Client */}
             <Route 
@@ -113,7 +125,6 @@ function App() {
               } 
             />
             
-            {/* Route de secours */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </LayoutWrapper>

@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore, setLogLevel } from "firebase/firestore"; // Garde bien ça
-import { getStorage } from "firebase/storage";
+import { initializeFirestore, setLogLevel } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // Import indispensable pour les fichiers
 
 const firebaseConfig = {
   apiKey: "AIzaSyAUJxlKLtryrMTQEzQVBEvRuWp-l5GcvWY",
@@ -14,20 +14,24 @@ const firebaseConfig = {
   measurementId: "G-QH5M3NXN0G"
 };
 
+// Initialisation de l'application
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 
+// On limite les logs pour garder une console propre
 setLogLevel('error'); 
 
+// Authentification
 export const auth = getAuth(app);
 
-// LA MODIF DE SECOURS ICI :
+// Firestore avec configuration de stabilité (Polling + Ignore Undefined)
 export const db = initializeFirestore(app, {
   ignoreUndefinedProperties: true,
-  experimentalForceLongPolling: true, // FORCE Firestore à utiliser un mode de connexion plus simple/stable
-  useFetchStreams: false // Empêche les erreurs de stream que tu vois dans la console
+  experimentalForceLongPolling: true, 
+  useFetchStreams: false 
 });
 
+// NOUVEAU : Exportation du Storage pour les images et vidéos du chat
 export const storage = getStorage(app);
 
 export default app;

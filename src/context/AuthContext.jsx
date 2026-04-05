@@ -2,9 +2,10 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { motion } from 'framer-motion'; // L'import qui manquait
 
 // 1. Création du contexte
-const AuthContext = createContext(undefined);
+const AuthContext = createContext(null);
 
 // 2. LE PROVIDER
 export function AuthProvider({ children }) {
@@ -13,9 +14,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChanged est la clé de la persistance (maintient la session au rafraîchissement)
+    // onAuthStateChanged maintient la session au rafraîchissement
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setLoading(true); // On s'assure d'être en chargement pendant la récupération Firestore
+      setLoading(true); 
       
       if (currentUser) {
         setUser(currentUser);
@@ -26,7 +27,7 @@ export function AuthProvider({ children }) {
             setUserData(docSnap.data());
           }
         } catch (error) {
-          console.error("Erreur récupération profil Firestore:", error);
+          console.error("Erreur profil Firestore:", error);
         }
       } else {
         setUser(null);
@@ -50,24 +51,37 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {/* IMPORTANT : On affiche un loader élégant aux couleurs d'EDÈN 
-          pour éviter que l'utilisateur ne voie le formulaire de login 
-          une fraction de seconde s'il est déjà connecté.
-      */}
-      {!loading ? children : (
-        <div className="min-h-screen bg-[#0A1A1E] flex flex-col items-center justify-center gap-6">
-          {/* Logo animé en fondu */}
-          <div className="relative">
+      {!loading ? (
+        children
+      ) : (
+        /* --- LOADER ÉLÉGANT EDÈN GROUP --- */
+        <div className="fixed inset-0 bg-[#0A1A1E] z-[999] flex flex-col items-center justify-center gap-6">
+          <div className="relative flex items-center justify-center">
+            {/* Spinner Doré */}
             <div className="w-16 h-16 border-2 border-[#B8976A]/20 border-t-[#B8976A] rounded-full animate-spin" />
+            
+            {/* Logo Central */}
             <img 
-                src="https://i.ibb.co/gMMcsrHk/logo.png" 
-                alt="Logo loading" 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 object-contain opacity-50"
+              src="https://i.ibb.co/gMMcsrHk/logo.png" 
+              alt="EDÈN" 
+              className="absolute w-8 h-8 object-contain opacity-60"
             />
           </div>
-          <p className="text-[#B8976A] text-[10px] uppercase tracking-[0.5em] font-bold animate-pulse">
-            Authentification Sécurisée
-          </p>
+
+          {/* Animation du texte de chargement */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.4, 1, 0.4] }}
+            transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+            className="flex flex-col items-center gap-2"
+          >
+            <p className="text-[#B8976A] text-[9px] uppercase tracking-[0.5em] font-black">
+              Authentification Sécurisée
+            </p>
+            <span className="text-white/10 text-[7px] uppercase tracking-[0.3em]">
+              EDÈN Group France
+            </span>
+          </motion.div>
         </div>
       )}
     </AuthContext.Provider>
@@ -77,7 +91,7 @@ export function AuthProvider({ children }) {
 // 3. LE HOOK
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth doit être utilisé à l'intérieur d'un AuthProvider");
   }
   return context;
