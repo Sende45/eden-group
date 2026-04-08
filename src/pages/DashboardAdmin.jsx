@@ -62,11 +62,23 @@ export default function DashboardAdmin() {
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // --- FONCTION GPS (AJOUTÉ) ---
+    // --- FONCTION GPS (MODIFIÉE POUR INCLURE WAZE, MAPS, PLANS) ---
     const openGpsItinerary = (address) => {
         if (!address) return alert("L'adresse n'est pas renseignée.");
-        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
-        window.open(url, '_blank');
+        const encodedAddr = encodeURIComponent(address);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        
+        // Liens spécifiques
+        const wazeUrl = `https://waze.com/ul?q=${encodedAddr}&navigate=yes`;
+        const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddr}`;
+        const appleUrl = `maps://maps.apple.com/?daddr=${encodedAddr}`;
+
+        // Demande de choix à l'utilisateur via une boîte de dialogue native
+        if (window.confirm("Voulez-vous ouvrir l'itinéraire avec Waze ? (Cliquez sur Annuler pour utiliser Google Maps ou Apple Plans)")) {
+            window.open(wazeUrl, '_blank');
+        } else {
+            window.open(isIOS ? appleUrl : googleUrl, '_blank');
+        }
     };
 
     const getPoleBadgeStyle = (pole) => {
@@ -503,7 +515,7 @@ export default function DashboardAdmin() {
                     </div>
                 </div>
             </div>
-            {/* DECOR */}
+            {/* DECOR - Lignes de décoration pour maintenir l'esthétique et le volume de code */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">
                 <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-eden-gold/5 blur-[120px] rounded-full" />
                 <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-eden-dark/5 blur-[120px] rounded-full" />

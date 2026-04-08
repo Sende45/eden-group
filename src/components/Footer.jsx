@@ -72,7 +72,7 @@ export default function Footer() {
                 <div className="flex justify-center md:justify-start mb-8">
                     <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-full">
                         <p className="text-[10px] text-eden-gold font-bold uppercase tracking-[0.2em]">
-                            SIRET / RCS — <span className="text-white">989 398 839</span>
+                            SIRET / RCS — <span className="text-white">989 398 839 00013</span>
                         </p>
                     </div>
                 </div>
