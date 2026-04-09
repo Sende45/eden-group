@@ -13,7 +13,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Services from './pages/Services'; 
-import Messages from './pages/Messages'; // <--- AJOUT DE LA PAGE MESSAGERIE
+import Messages from './pages/Messages'; 
+import PrivacyPolicy from './pages/PrivacyPolicy'; // <--- AJOUT DE LA PAGE PRIVACY POLICY
 
 // Dashboards
 import EspaceClient from './pages/EspaceClient';
@@ -57,8 +58,9 @@ const LayoutWrapper = ({ children }) => {
   
   const isPortal = location.pathname === '/';
   const isDashboard = location.pathname.includes('dashboard');
-  // MODIF : On cache aussi le Header/Footer sur la page Messages pour un look "App Mobile" plein écran
   const isMessages = location.pathname === '/messages';
+  
+  // Note : On laisse le Header/Footer pour la Privacy Policy car c'est une page légale publique
   const hideLayout = isPortal || isDashboard || isMessages;
 
   return (
@@ -94,6 +96,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            
+            {/* PAGE LÉGALE (POINT GOOGLE PLAY CONSOLE) */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
             {/* MESSAGERIE PROTÉGÉE (POINT 1) */}
             <Route 
