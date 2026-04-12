@@ -1,5 +1,6 @@
 import React from 'react';
 import { Mail, MapPin, Phone, Globe, ArrowUpRight, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom'; // Import ajouté pour la navigation interne
 
 export default function Footer() {
     return (
@@ -77,10 +78,16 @@ export default function Footer() {
                     </div>
                 </div>
 
-                {/* COPYRIGHT & SIGNATURE */}
+                {/* COPYRIGHT & LEGAL LINKS */}
                 <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-[9px] md:text-[10px] text-gray-500 uppercase tracking-[0.2em] font-bold">
-                    <span>© 2026 EDÈN Group — Tous droits réservés</span>
-                    <span className="text-gray-700 hidden md:inline">|</span>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        <span>© 2026 EDÈN Group — Tous droits réservés</span>
+                        <span className="text-gray-700 hidden md:inline">|</span>
+                        <Link to="/privacy-policy" className="hover:text-eden-gold transition-colors">Confidentialité</Link>
+                        <span className="text-gray-700 hidden md:inline">|</span>
+                        {/* LIEN TERMLY AJOUTÉ ICI */}
+                        <a href="#" className="termly-display-preferences hover:text-eden-gold transition-colors">Préférences Cookies</a>
+                    </div>
                     <span>L'Excellence de la Propreté — Fait à Paris</span>
                 </div>
             </div>
