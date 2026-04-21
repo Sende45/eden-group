@@ -10,8 +10,7 @@ import {
   Eye, 
   EyeOff, 
   Loader2, 
-  AlertCircle,
-  ShieldCheck 
+  AlertCircle 
 } from 'lucide-react';
 // Firebase
 import { auth, db } from '../firebase';
@@ -68,10 +67,15 @@ const Register = () => {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const newUser = userCredential.user;
 
+      // Logique dynamique pour la structure selon le pôle
+      const finalStructure = selectedPole === 'particulier' 
+        ? "Particulier" 
+        : (formData.structure || "Non précisé");
+
       await setDoc(doc(db, "users", newUser.uid), {
         uid: newUser.uid,
         fullName: formData.fullName,
-        structure: formData.structure || "Non précisé",
+        structure: finalStructure,
         email: formData.email.toLowerCase().trim(),
         pole: selectedPole,
         role: 'client', 
@@ -126,15 +130,25 @@ const Register = () => {
                </div>
             </div>
 
-            <div className="space-y-1">
+            {/* Nom Complet : prend toute la largeur si Particulier pour un meilleur design */}
+            <div className={`space-y-1 ${selectedPole === 'particulier' ? 'md:col-span-2' : ''}`}>
               <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Nom complet</label>
-              <div className="relative"><UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} /><input required type="text" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} placeholder="Jean Dupont"/></div>
+              <div className="relative">
+                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <input required type="text" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} placeholder="Jean Dupont"/>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Structure</label>
-              <div className="relative"><Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} /><input type="text" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.structure} onChange={e => setFormData({...formData, structure: e.target.value})} placeholder="Nom société"/></div>
-            </div>
+            {/* Structure : Masqué uniquement pour les particuliers */}
+            {selectedPole !== 'particulier' && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Structure</label>
+                <div className="relative">
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <input required={selectedPole !== 'particulier'} type="text" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.structure} onChange={e => setFormData({...formData, structure: e.target.value})} placeholder="Nom société"/>
+                </div>
+              </div>
+            )}
 
             <div className="md:col-span-2 space-y-1">
               <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Email</label>
