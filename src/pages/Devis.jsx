@@ -9,6 +9,7 @@ import fr from 'date-fns/locale/fr';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import emailjs from '@emailjs/browser'; // AJOUT IMPORT EMAILJS
 
 registerLocale('fr', fr);
 
@@ -30,7 +31,13 @@ const Devis = () => {
     appointmentDate: null
   });
 
-  // --- NOUVEAU : Restriction des horaires (8h00 à 18h00) ---
+  // --- CONFIGURATION EMAILJS (Doit correspondre à tes identifiants) ---
+  const EMAILJS_CONFIG = {
+    SERVICE_ID: "service_f8258dd",
+    PUBLIC_KEY: "xX6MHYJpo5d9EY7MK",
+    TEMPLATE_NOTIF_ADMIN: "template_ujqrt4i" // Utilise le template de récapitulatif ici
+  };
+
   const minTime = new Date();
   minTime.setHours(8, 0, 0);
   const maxTime = new Date();
@@ -71,6 +78,7 @@ const Devis = () => {
     return day !== 0 && day !== 6;
   };
 
+  // --- LOGIQUE DE SOUMISSION MODIFIÉE ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.email.includes('@')) return alert("Veuillez entrer un email valide.");
@@ -79,22 +87,46 @@ const Devis = () => {
     setIsSubmitting(true);
     
     try {
+      const clientName = userData?.fullName || userData?.nom || 'Client Externe';
+      
+      // 1. Sauvegarde dans Firebase
       await addDoc(collection(db, "devis"), {
         ...formData,
-        appointmentDate: selectedDate, // On s'assure d'envoyer la date sélectionnée
+        appointmentDate: selectedDate,
         userId: user ? user.uid : 'anonyme',
-        clientName: userData?.fullName || userData?.nom || 'Client',
+        clientName: clientName,
         status: "nouveau",
         typeService: "nettoyage",
         createdAt: serverTimestamp()
       });
 
-      alert(`Votre demande a été transmise avec succès. La direction d'Eden Group étudiera votre dossier.`);
+      // 2. Envoi du mail récapitulatif à l'ADMIN
+      const paramsRecapAdmin = {
+        client_name: clientName,
+        client_email: formData.email,
+        pole: formData.pole,
+        surface: `${formData.surface} m²`,
+        localisation: formData.localisation,
+        frequence: formData.frequence,
+        message: formData.message || "Aucun message",
+        rdv_date: selectedDate.toLocaleString('fr-FR', {
+          day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        })
+      };
+
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID, 
+        EMAILJS_CONFIG.TEMPLATE_NOTIF_ADMIN, 
+        paramsRecapAdmin, 
+        EMAILJS_CONFIG.PUBLIC_KEY
+      );
+
+      alert(`Votre demande a été transmise avec succès. Un agent d'Edèn Group reviendra vers vous avec votre prix.`);
       setIsSubmitting(false);
       navigate(user ? '/dashboard' : '/');
     } catch (error) {
       console.error("Erreur lors de l'envoi :", error);
-      alert("Une erreur est survenue lors de l'envoi.");
+      alert("Une erreur est survenue lors de l'envoi du formulaire.");
       setIsSubmitting(false);
     }
   };
@@ -107,7 +139,6 @@ const Devis = () => {
 
   return (
     <div className="min-h-screen bg-eden-dark pt-24 md:pt-32 pb-10 md:pb-20 px-4 md:px-6 font-sans text-eden-dark">
-      {/* --- CSS PERSONNALISÉ POUR LE DATEPICKER --- */}
       <style>{`
         .react-datepicker {
           font-family: inherit !important;
@@ -121,7 +152,7 @@ const Devis = () => {
           border-radius: 1.5rem 1.5rem 0 0 !important;
         }
         .react-datepicker__day--selected {
-          background-color: #C5A059 !important; /* Doré Eden */
+          background-color: #C5A059 !important;
           border-radius: 0.5rem !important;
         }
         .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li--selected {
@@ -130,7 +161,6 @@ const Devis = () => {
       `}</style>
 
       <div className="max-w-4xl mx-auto">
-        {/* Titre et étapes identiques... */}
         <div className="text-center mb-8 md:mb-12">
            <motion.h1 
              initial={{ opacity: 0, y: -20 }} 
@@ -170,7 +200,6 @@ const Devis = () => {
             )}
 
             {step === 2 && (
-               // ... Step 2 reste identique ...
                <motion.div key="step2" {...stepVariants} className="space-y-6 md:space-y-8">
                 <h2 className="font-black-mango text-xl md:text-2xl">Détails de l'intervention pour <span className="text-eden-gold">{formData.pole}</span></h2>
                 <div className="space-y-6 md:space-y-8">
@@ -216,6 +245,7 @@ const Devis = () => {
                         <option value="Paris / Île-de-France">Paris / Île-de-France</option>
                         <option value="Auvergne-Rhône-Alpes">Auvergne-Rhône-Alpes</option>
                         <option value="Haute-Loire">Haute-Loire</option>
+                        <option value="Haute-Savoie">Haute-Savoie</option>
                       </select>
                     </div>
                   </div>
@@ -249,7 +279,6 @@ const Devis = () => {
                         timeCaption="Heure"
                         dateFormat="dd MMMM yyyy à HH:mm"
                         minDate={new Date()}
-                        // --- AJOUT DES RESTRICTIONS HORAIRES ---
                         minTime={minTime}
                         maxTime={maxTime}
                         locale="fr"

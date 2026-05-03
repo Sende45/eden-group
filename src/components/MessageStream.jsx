@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, MapPin, Send, Camera, PlayCircle, CheckCheck, Loader2 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, updateDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 
 const MediaDisplay = ({ url }) => {
@@ -38,6 +38,26 @@ const MessageStream = () => {
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef(null);
 
+  // --- NOUVEAU : MARQUER COMME LU ---
+  // Cette fonction passe tous les messages reçus de l'admin à "read: true"
+  const markMessagesAsRead = async (docs) => {
+    const batch = writeBatch(db);
+    let hasUpdates = false;
+
+    docs.forEach((msgDoc) => {
+      // Si le message vient de l'admin et n'est pas encore lu
+      if (msgDoc.data().role === 'admin' && msgDoc.data().read === false) {
+        const docRef = doc(db, "messages", msgDoc.id);
+        batch.update(docRef, { read: true });
+        hasUpdates = true;
+      }
+    });
+
+    if (hasUpdates) {
+      await batch.commit();
+    }
+  };
+
   useEffect(() => {
     if (!userData?.fullName) return;
 
@@ -53,8 +73,13 @@ const MessageStream = () => {
         ...doc.data(),
         time: doc.data().timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || "..."
       }));
+      
       setMessages(docs);
       setLoading(false);
+      
+      // On marque les messages reçus comme lus pour l'admin
+      markMessagesAsRead(snapshot.docs);
+      
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     });
 
@@ -73,6 +98,7 @@ const MessageStream = () => {
         clientTarget: userData?.fullName,
         timestamp: serverTimestamp(),
         role: 'client', 
+        read: false, // INDISPENSABLE : Pour déclencher la notif sur le Dashboard Admin
         location: userData?.structure || "Espace Client"
       });
       setNewMessage('');
