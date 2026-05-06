@@ -120,7 +120,7 @@ const MessageStream = () => {
         <div className="flex items-center gap-3 md:gap-4">
           <div className="w-1.5 md:w-2 h-8 md:h-10 bg-eden-gold rounded-full" />
           <div className="truncate">
-            <h3 className="font-black-mango text-xl md:text-2xl text-eden-dark truncate">Pilotage Direct</h3>
+            <h3 className="font-black-mango text-xl md:text-2xl text-eden-dark truncate">Rapports instantanés</h3>
             <p className="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-widest font-bold truncate">
                Suivi — {userData?.structure || "Privé"}
             </p>

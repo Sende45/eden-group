@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Utilisation de MessageSquare pour la messagerie interne (Point 1)
 import { User, Menu, MessageCircle, MessageSquare, X } from 'lucide-react'; 
 import { Link, useLocation } from 'react-router-dom';
+// IMPORT AJOUTÉ : Pour vérifier l'état de connexion
+import { useAuth } from '../context/AuthContext';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -10,6 +12,9 @@ export default function Header() {
   // Simulation d'un état de nouveau message (badge rouge)
   const [hasNewMessage, setHasNewMessage] = useState(true); 
   const location = useLocation();
+
+  // RÉCUPÉRATION AJOUTÉE : L'utilisateur depuis le contexte
+  const { user } = useAuth();
 
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
   const isMessagesPage = location.pathname === '/messages';
@@ -104,8 +109,9 @@ export default function Header() {
             <span>WhatsApp</span>
           </a>
           
+          {/* MODIF : Redirection vers /espace-client si connecté, sinon /login */}
           <Link 
-            to="/login" 
+            to={user ? "/espace-client" : "/login"} 
             className={`flex items-center gap-2 px-4 md:px-6 py-2 bg-eden-gold text-white rounded-full text-[8px] md:text-[9px] font-bold uppercase tracking-widest transition-all shadow-xl hover:brightness-110 active:scale-95 ${isAuthPage ? 'opacity-0 pointer-events-none' : ''}`}
           >
             <User size={14} /> 
@@ -154,7 +160,8 @@ export default function Header() {
               
               <div className="h-px bg-white/10 my-2" />
               
-              <Link to="/login" className="font-black-mango text-3xl text-white flex items-center gap-3">
+              {/* MODIF MOBILE : Même logique dynamique pour le menu mobile */}
+              <Link to={user ? "/espace-client" : "/login"} className="font-black-mango text-3xl text-white flex items-center gap-3">
                 Mon Compte <User size={28} />
               </Link>
             </nav>

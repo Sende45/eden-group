@@ -14,7 +14,7 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Services from './pages/Services'; 
 import Messages from './pages/Messages'; 
-import PrivacyPolicy from './pages/PrivacyPolicy'; // <--- AJOUT DE LA PAGE PRIVACY POLICY
+import PrivacyPolicy from './pages/PrivacyPolicy'; 
 
 // Dashboards
 import EspaceClient from './pages/EspaceClient';
@@ -39,7 +39,8 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   if (adminOnly && userData?.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
+    // MODIF 1 : Redirection vers espace-client si un non-admin tente d'accéder à l'admin
+    return <Navigate to="/espace-client" replace />;
   }
 
   return children;
@@ -57,10 +58,10 @@ const LayoutWrapper = ({ children }) => {
   const location = useLocation();
   
   const isPortal = location.pathname === '/';
-  const isDashboard = location.pathname.includes('dashboard');
+  // MODIF 2 : Mise à jour de la détection pour inclure le nouveau chemin
+  const isDashboard = location.pathname.includes('dashboard') || location.pathname.includes('espace-client');
   const isMessages = location.pathname === '/messages';
   
-  // Note : On laisse le Header/Footer pour la Privacy Policy car c'est une page légale publique
   const hideLayout = isPortal || isDashboard || isMessages;
 
   return (
@@ -100,7 +101,7 @@ function App() {
             {/* PAGE LÉGALE (POINT GOOGLE PLAY CONSOLE) */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
-            {/* MESSAGERIE PROTÉGÉE (POINT 1) */}
+            {/* MESSAGERIE PROTÉGÉE */}
             <Route 
               path="/messages" 
               element={
@@ -110,9 +111,9 @@ function App() {
               } 
             />
 
-            {/* Espace Privé Client */}
+            {/* Espace Privé Client - AJOUT DU /* POUR LE PROFIL */}
             <Route 
-              path="/dashboard" 
+              path="/espace-client/*" 
               element={
                 <ProtectedRoute>
                   <EspaceClient />
