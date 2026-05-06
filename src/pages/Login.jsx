@@ -24,8 +24,8 @@ const Login = () => {
       if (userData.role === 'admin') {
         navigate('/admin-dashboard', { replace: true });
       } else {
-        // Redirection directe vers la section profil du dashboard
-        navigate('/dashboard/profile', { replace: true });
+        // Changement ici : redirection vers l'espace client privé
+        navigate('/espace-client', { replace: true });
       }
     }
   }, [user, userData, authLoading, navigate]);
@@ -46,12 +46,12 @@ const Login = () => {
         if (data.role === 'admin') {
           navigate('/admin-dashboard', { replace: true });
         } else {
-          // Redirection directe vers la section profil après connexion réussie
-          navigate('/dashboard/profile', { replace: true }); 
+          // Changement ici : redirection vers l'espace client privé après connexion
+          navigate('/espace-client', { replace: true }); 
         }
       } else {
-        // Redirection de secours vers le profil
-        navigate('/dashboard/profile', { replace: true });
+        // Redirection de secours vers l'espace client
+        navigate('/espace-client', { replace: true });
       }
     } catch (error) {
       console.error("Login Error:", error.code);

@@ -27,7 +27,8 @@ import ProfileDetail from "../components/ProfileDetail";
 
 const EspaceClient = () => {
   const { userData, logout, loading } = useAuth(); 
-  const [activeTab, setActiveTab] = useState('live');
+  // MODIF : L'état initial passe de 'live' à 'profile' pour l'affichage direct du profil
+  const [activeTab, setActiveTab] = useState('profile');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   
@@ -47,7 +48,8 @@ const EspaceClient = () => {
                     confirmedAt: serverTimestamp() 
                 });
                 alert("✨ Excellence validée ! Votre devis est confirmé. Nos équipes préparent l'intervention.");
-                navigate('/dashboard', { replace: true });
+                // MODIF : Redirection vers /espace-client au lieu de /dashboard pour rester cohérent
+                navigate('/espace-client', { replace: true });
             } catch (error) {
                 console.error("Erreur de confirmation devis:", error);
             }
