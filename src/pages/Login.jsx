@@ -18,13 +18,13 @@ const Login = () => {
   const navigate = useNavigate();
   const { user, userData, loading: authLoading } = useAuth(); 
 
-  // --- MODIF : REDIRECTION AUTOMATIQUE SI UNE SESSION EXISTE ---
+  // --- REDIRECTION AUTOMATIQUE SI UNE SESSION EXISTE ---
   useEffect(() => {
     if (!authLoading && user && userData) {
       if (userData.role === 'admin') {
         navigate('/admin-dashboard', { replace: true });
       } else {
-        // Changement ici : redirection vers l'espace client privé
+        // Redirection vers l'espace client privé
         navigate('/espace-client', { replace: true });
       }
     }
@@ -46,11 +46,11 @@ const Login = () => {
         if (data.role === 'admin') {
           navigate('/admin-dashboard', { replace: true });
         } else {
-          // Changement ici : redirection vers l'espace client privé après connexion
+          // Redirection vers l'espace client après connexion
           navigate('/espace-client', { replace: true }); 
         }
       } else {
-        // Redirection de secours vers l'espace client
+        // Redirection de secours
         navigate('/espace-client', { replace: true });
       }
     } catch (error) {

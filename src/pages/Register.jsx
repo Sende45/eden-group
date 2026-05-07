@@ -36,10 +36,11 @@ const Register = () => {
     confirmPassword: ''
   });
 
-  // Redirection si déjà connecté
+  // REDIRECTION AUTOMATIQUE SI DÉJÀ CONNECTÉ
   useEffect(() => {
     if (!authLoading && user && userData) {
-      navigate(userData.role === 'admin' ? '/admin-dashboard' : '/dashboard', { replace: true });
+      // Modifié pour pointer vers /espace-client pour les clients
+      navigate(userData.role === 'admin' ? '/admin-dashboard' : '/espace-client', { replace: true });
     }
   }, [user, userData, authLoading, navigate]);
 
@@ -82,7 +83,8 @@ const Register = () => {
         createdAt: serverTimestamp()
       });
 
-      navigate('/dashboard'); 
+      // Redirection après inscription réussie vers l'espace client
+      navigate('/espace-client', { replace: true }); 
     } catch (err) {
       console.error(err);
       setError(err.code === 'auth/email-already-in-use' ? "Cet email est déjà utilisé." : "Erreur lors de l'inscription.");
@@ -130,7 +132,6 @@ const Register = () => {
                </div>
             </div>
 
-            {/* Nom Complet : prend toute la largeur si Particulier pour un meilleur design */}
             <div className={`space-y-1 ${selectedPole === 'particulier' ? 'md:col-span-2' : ''}`}>
               <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Nom complet</label>
               <div className="relative">
@@ -139,7 +140,6 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Structure : Masqué uniquement pour les particuliers */}
             {selectedPole !== 'particulier' && (
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Structure</label>

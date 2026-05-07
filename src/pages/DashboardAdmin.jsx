@@ -14,25 +14,16 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../context/AuthContext';
-import emailjs from '@emailjs/browser';
 
 export default function DashboardAdmin() {
     const { userData, logout } = useAuth();
     const navigate = useNavigate();
-
-    // --- CONFIGURATION EMAILJS ---
-    const EMAILJS_CONFIG = {
-        SERVICE_ID: "service_f8258dd",
-        PUBLIC_KEY: "xX6MHYJpo5d9EY7MK",
-        TEMPLATE_DEVIS: "template_ujqrt4i",
-        TEMPLATE_RAPPORT: "template_fnbg1qe"
-    };
     
     // --- ÉTATS GÉNÉRAUX ---
     const [clients, setClients] = useState([]);
     const [stats, setStats] = useState({ totalToday: 0, lastReportTime: '--:--' });
     const [unreadChats, setUnreadChats] = useState([]);
-    const [unreadCounts, setUnreadCounts] = useState({}); // Compteur par client
+    const [unreadCounts, setUnreadCounts] = useState({});
 
     // --- ÉTATS RAPPORT ---
     const [loading, setLoading] = useState(false);
@@ -68,7 +59,6 @@ export default function DashboardAdmin() {
         if (!address) return alert("L'adresse n'est pas renseignée.");
         const encodedAddr = encodeURIComponent(address);
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        
         const wazeUrl = `https://waze.com/ul?q=${encodedAddr}&navigate=yes`;
         const googleUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddr}`;
         const appleUrl = `maps://maps.apple.com/?daddr=${encodedAddr}`;
@@ -107,7 +97,6 @@ export default function DashboardAdmin() {
         };
         fetchAdminData();
 
-        // Écoute des messages non lus pour le bouton global
         const unsubChats = onSnapshot(
             query(collection(db, "messages"), where("role", "==", "client"), where("read", "==", false)), 
             (snapshot) => {
@@ -115,14 +104,12 @@ export default function DashboardAdmin() {
             }
         );
 
-        // --- MODIF MESSAGERIE : Nettoyage des espaces (Trim) ---
         const qUnread = query(collection(db, "messages"), where("role", "==", "client"), where("read", "==", false)); 
         const unsubUnread = onSnapshot(qUnread, (snapshot) => {
             const counts = {};
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
                 if (data.clientTarget) {
-                    // On nettoie le nom de la base de données pour le comptage
                     const cleanTarget = data.clientTarget.trim();
                     counts[cleanTarget] = (counts[cleanTarget] || 0) + 1;
                 }
@@ -136,7 +123,6 @@ export default function DashboardAdmin() {
         };
     }, []);
 
-    // --- MODIF TRI : Nettoyage des noms pour la comparaison ---
     const sortedClients = useMemo(() => {
         return [...clients].sort((a, b) => {
             const countA = unreadCounts[a.fullName?.trim()] || 0;
@@ -178,26 +164,23 @@ export default function DashboardAdmin() {
                 validatedAt: serverTimestamp() 
             });
 
-            const paramsDevis = {
-                client_email: devis.email,
-                client_name: devis.clientName || "Cher Client",
-                prix_final: prixNumerique.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }),
-                pole: devis.pole,
-                surface: `${devis.surface} m²`,
-                localisation: devis.localisation || "Non précisée",
-                frequence: devis.frequence || "Ponctuel",
-                message: devis.message || "Aucune note particulière",
-                rdv_date: devis.appointmentDate 
-                    ? devis.appointmentDate.toDate().toLocaleString('fr-FR', {day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'})
-                    : "À confirmer",
-                devis_id: devis.id
-            };
-            
-            await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_DEVIS, paramsDevis, EMAILJS_CONFIG.PUBLIC_KEY);
+            // ENVOI DANS LA MESSAGERIE INTERNE AU LIEU DE EMAILJS
+            if (devis.userId && devis.userId !== 'anonyme') {
+                await addDoc(collection(db, "messages"), {
+                    userId: devis.userId,
+                    sender: "Admin EDÈN",
+                    text: `✅ Votre devis pour ${devis.pole} a été validé ! Le prix final est de ${prixNumerique}€. Vous pouvez désormais le confirmer depuis votre historique de devis.`,
+                    timestamp: serverTimestamp(),
+                    type: "notification",
+                    role: "admin",
+                    clientTarget: devis.clientName,
+                    read: false
+                });
+            }
 
             setDevisList(prev => prev.filter(d => d.id !== devis.id));
             fetchPendingDevis(); 
-            alert(`✅ Prix validé (${prixNumerique}€) ! Récapitulatif envoyé au client.`);
+            alert(`✅ Prix validé (${prixNumerique}€) ! Le client a été notifié dans sa messagerie.`);
         } catch (error) { 
             console.error(error);
             alert("Erreur lors de la validation.");
@@ -229,6 +212,7 @@ export default function DashboardAdmin() {
                 senderName: userData?.fullName || "Agent EDÈN",
                 role: 'admin',
                 clientTarget: selectedClient, 
+                userId: targetClient?.uid || targetClient?.id, // Important pour que le client le voit
                 timestamp: serverTimestamp(),
                 location: selectedClient,
                 type: "Rapport d'Intervention",
@@ -236,20 +220,9 @@ export default function DashboardAdmin() {
                 read: false 
             });
 
-            if (targetClient?.email) {
-                const paramsRapport = {
-                    client_email: targetClient.email,
-                    client_name: selectedClient,
-                    message_agent: finalMessage,
-                    media_url: mediaUrl || "Aucun média joint",
-                    date: new Date().toLocaleDateString('fr-FR')
-                };
-                await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_RAPPORT, paramsRapport, EMAILJS_CONFIG.PUBLIC_KEY);
-            }
-
             setFile(null); setPreview(null); setMessage(''); setTasks(tasks.map(t => ({ ...t, completed: false })));
             fetchHistory();
-            alert("🚀 Rapport propulsé !");
+            alert("🚀 Rapport propulsé dans la messagerie du client !");
         } catch (error) { console.error(error); } 
         finally { setLoading(false); }
     };
@@ -304,7 +277,7 @@ export default function DashboardAdmin() {
     return (
         <div className="min-h-screen bg-[#FDFDFD] pt-20 md:pt-28 pb-10 md:pb-20 px-4 md:px-6 font-sans text-eden-dark selection:bg-eden-gold/20">
             <div className="max-w-7xl mx-auto">
-                
+                {/* ... (Reste du JSX identique) ... */}
                 {/* HEADER */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 md:mb-16 gap-6">
                     <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
@@ -347,7 +320,6 @@ export default function DashboardAdmin() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
-                    
                     {/* COLONNE GAUCHE */}
                     <div className="lg:col-span-4 space-y-6 md:space-y-8">
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-eden-dark p-8 md:p-10 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
@@ -429,10 +401,8 @@ export default function DashboardAdmin() {
                                     <label className="text-[10px] uppercase font-black text-gray-400 ml-4 tracking-[0.2em]">Destinataire</label>
                                     <div className="relative">
                                         <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-eden-gold z-10" size={18} />
-                                        
                                         <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="w-full bg-gray-50/50 border-2 border-gray-50 rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-eden-gold/30 focus:bg-white text-xs md:text-sm font-black appearance-none cursor-pointer shadow-inner relative z-0">
                                             {sortedClients.map(c => {
-                                                // MODIF : Comparaison avec trim pour ignorer les espaces DB
                                                 const count = unreadCounts[c.fullName?.trim()] || 0;
                                                 return (
                                                     <option key={c.id} value={c.fullName}>
@@ -442,27 +412,6 @@ export default function DashboardAdmin() {
                                                 );
                                             })}
                                         </select>
-
-                                        {/* Badge doré dynamique (Nouveaux messages client) */}
-                                        <AnimatePresence>
-                                            {unreadCounts[selectedClient?.trim()] > 0 && (
-                                                <div className="absolute right-12 top-1/2 -translate-y-1/2 pointer-events-none z-20">
-                                                    <motion.div 
-                                                        initial={{ scale: 0, opacity: 0 }} 
-                                                        animate={{ scale: 1, opacity: 1 }} 
-                                                        exit={{ scale: 0, opacity: 0 }}
-                                                        className="bg-eden-gold text-eden-dark text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg border border-white/20 flex items-center gap-2"
-                                                    >
-                                                        <span className="w-1.5 h-1.5 bg-eden-dark rounded-full animate-pulse" />
-                                                        {unreadCounts[selectedClient?.trim()]} NOUVEAU{unreadCounts[selectedClient?.trim()] > 1 ? 'S' : ''}
-                                                    </motion.div>
-                                                </div>
-                                            )}
-                                        </AnimatePresence>
-                                        
-                                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-300 z-10">
-                                            <Plus size={14} className="rotate-45" />
-                                        </div>
                                     </div>
                                 </div>
 
@@ -496,7 +445,7 @@ export default function DashboardAdmin() {
                                     </label>
                                 </div>
                                 <button disabled={loading} type="submit" className="w-full py-5 md:py-7 bg-eden-dark text-white rounded-[1.5rem] font-black uppercase tracking-[0.3em] text-[10px] md:text-[12px] flex items-center justify-center gap-3 hover:bg-[#0a1a1e] transition-all shadow-2xl disabled:opacity-50">
-                                    {loading ? <Loader2 className="animate-spin text-eden-gold" /> : <Send size={18} className="text-eden-gold" />} <span>Propulser Rapport (App + Mail)</span>
+                                    {loading ? <Loader2 className="animate-spin text-eden-gold" /> : <Send size={18} className="text-eden-gold" />} <span>Propulser Rapport</span>
                                 </button>
                             </form>
                         </motion.section>
@@ -541,12 +490,9 @@ export default function DashboardAdmin() {
                                 {loadingHistory ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-eden-gold" /></div> : 
                                 filteredHistory.map((item) => {
                                     const isNew = item.read === false;
-
                                     return (
                                         <div key={item.id} className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-2xl transition-all group gap-4 shadow-sm border ${
-                                            isNew 
-                                            ? 'bg-eden-gold/5 border-eden-gold/30 ring-1 ring-eden-gold/10' 
-                                            : 'bg-gray-50/50 border-gray-100 hover:bg-white'
+                                            isNew ? 'bg-eden-gold/5 border-eden-gold/30 ring-1 ring-eden-gold/10' : 'bg-gray-50/50 border-gray-100 hover:bg-white'
                                         }`}>
                                             <div className="flex items-center gap-4">
                                                 <div className={`p-3 rounded-xl shadow-sm transition-all transform group-hover:rotate-6 ${
