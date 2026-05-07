@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Ajout de useEffect
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LogOut, 
@@ -14,10 +14,10 @@ import {
   Menu,
   X 
 } from 'lucide-react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom'; // Ajout de useSearchParams
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 
-import { db } from '../firebase'; // Import de db
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'; // Import Firestore logic
+import { db } from '../firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext'; 
 
 import MessageStream from "../components/MessageStream"; 
@@ -27,12 +27,10 @@ import ProfileDetail from "../components/ProfileDetail";
 
 const EspaceClient = () => {
   const { userData, logout, loading } = useAuth(); 
-  // MODIF : L'état initial passe de 'live' à 'profile' pour l'affichage direct du profil
   const [activeTab, setActiveTab] = useState('profile');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   
-  // --- LOGIQUE DE DÉTECTION DU MAIL ---
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
@@ -48,7 +46,6 @@ const EspaceClient = () => {
                     confirmedAt: serverTimestamp() 
                 });
                 alert("✨ Excellence validée ! Votre devis est confirmé. Nos équipes préparent l'intervention.");
-                // MODIF : Redirection vers /espace-client au lieu de /dashboard pour rester cohérent
                 navigate('/espace-client', { replace: true });
             } catch (error) {
                 console.error("Erreur de confirmation devis:", error);
@@ -97,13 +94,15 @@ const EspaceClient = () => {
 
       {/* SIDEBAR NAVIGATION */}
       <aside className={`fixed inset-y-0 left-0 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 w-72 bg-eden-dark text-white p-8 flex flex-col z-40 h-full`}>
+        {/* LOGO EDEN : Vers Portal (/) */}
         <Link to="/" className="mb-12 group hidden md:block">
           <h2 className="font-black-mango text-3xl text-eden-gold group-hover:scale-105 transition-transform">EDÈN</h2>
           <p className="text-[9px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Private Access</p>
         </Link>
 
         <nav className="flex-grow space-y-4">
-          <Link to="/" className="w-full flex items-center gap-4 p-4 rounded-2xl text-gray-400 hover:text-white hover:bg-white/5 font-bold text-xs uppercase tracking-widest transition-all group">
+          {/* MODIF : Redirection vers /accueil (Home) */}
+          <Link to="/accueil" className="w-full flex items-center gap-4 p-4 rounded-2xl text-gray-400 hover:text-white hover:bg-white/5 font-bold text-xs uppercase tracking-widest transition-all group">
             <HomeIcon size={18} className="group-hover:text-eden-gold" /> Retour au Site
           </Link>
 
@@ -152,7 +151,8 @@ const EspaceClient = () => {
           </motion.div>
 
           <div className="flex items-center gap-3 md:gap-4 self-end md:self-center">
-            <Link to="/" className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl border border-gray-100 flex items-center justify-center text-eden-dark hover:text-eden-gold shadow-sm group">
+            {/* MODIF : Redirection de l'icône Maison vers /accueil (Home) */}
+            <Link to="/accueil" className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl border border-gray-100 flex items-center justify-center text-eden-dark hover:text-eden-gold shadow-sm group">
               <HomeIcon size={18} className="group-hover:scale-110 transition-transform" />
             </Link>
 
@@ -196,7 +196,6 @@ const EspaceClient = () => {
             )}
           </AnimatePresence>
         </div>
-
       </main>
     </div>
   );
