@@ -29,6 +29,17 @@ const Register = () => {
     confirmPassword: ''
   });
 
+  // LOGIQUE D'INJECTION TERMLY (CGU/Consentement)
+  useEffect(() => {
+    const existingScript = document.querySelector('script[src*="termly"]');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = "https://app.termly.io/resource-blocker/e2e770e0-58c1-404f-a952-ecde733679f9?autoBlock=on";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && user && userData) {
       // Si on vient du devis, on y retourne, sinon dashboard
