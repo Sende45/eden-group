@@ -5,7 +5,7 @@ import {
   Construction, Building2, UserCheck, ArrowRight, 
   Camera, Clock, ShieldCheck, MessageCircle, Sparkles, 
   Star, Quote, Image as ImageIcon, Send, Loader2,
-  Plus, X, FileCheck 
+  Plus, X, FileCheck, CornerDownRight 
 } from 'lucide-react';
 
 // Firebase imports
@@ -124,7 +124,7 @@ const Home = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAvisForm, setShowAvisForm] = useState(false);
   const [avisData, setAvisData] = useState({ name: '', comment: '', rating: 5 });
-  const [hoverRating, setHoverRating] = useState(0); // État pour le hover des étoiles
+  const [hoverRating, setHoverRating] = useState(0); 
   const [avisFile, setAvisFile] = useState(null);
   const [avisPreview, setAvisPreview] = useState(null);
 
@@ -243,7 +243,6 @@ const Home = () => {
                     <input type="text" placeholder="Votre Nom / Structure" required className="w-full p-5 bg-white/5 rounded-2xl border border-white/10 outline-none focus:ring-2 ring-eden-gold/50 font-medium text-white placeholder:text-gray-500" value={avisData.name} onChange={e => setAvisData({...avisData, name: e.target.value})}/>
                     <textarea placeholder="Votre expérience avec EDÈN Group..." required className="w-full p-5 bg-white/5 rounded-2xl border border-white/10 outline-none focus:ring-2 ring-eden-gold/50 font-medium h-40 text-white placeholder:text-gray-500" value={avisData.comment} onChange={e => setAvisData({...avisData, comment: e.target.value})}/>
                     
-                    {/* NOUVEAU : SYSTÈME DE RATING DANS LE FORMULAIRE */}
                     <div className="pt-2">
                       <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest block mb-4">Votre Note</span>
                       <div className="flex gap-2 items-center bg-white/5 w-fit p-3 px-5 rounded-2xl border border-white/10">
@@ -338,8 +337,22 @@ const Home = () => {
                       </span>
                     </div>
 
-                    <p className="text-gray-300 font-light leading-relaxed mb-8 flex-grow italic text-sm md:text-base">"{rev.comment}"</p>
-                    <div className="flex items-center gap-4 pt-6 border-t border-white/10">
+                    <p className="text-gray-300 font-light leading-relaxed mb-6 flex-grow italic text-sm md:text-base">"{rev.comment}"</p>
+                    
+                    {/* MODIFICATION : AFFICHAGE DE LA RÉPONSE ADMIN */}
+                    {rev.adminReply && (
+                      <div className="mb-8 p-5 bg-eden-gold/5 rounded-2xl border-l-2 border-eden-gold relative">
+                        <div className="flex items-center gap-2 mb-2">
+                           <CornerDownRight size={12} className="text-eden-gold" />
+                           <span className="text-[9px] font-black uppercase text-eden-gold tracking-widest">Réponse de la Direction</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 leading-relaxed italic font-medium">
+                          "{rev.adminReply}"
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 pt-6 border-t border-white/10 mt-auto">
                       {rev.photoUrl ? (
                         <img src={rev.photoUrl} className="w-12 h-12 rounded-full object-cover border-2 border-eden-gold/20" alt="client" />
                       ) : (

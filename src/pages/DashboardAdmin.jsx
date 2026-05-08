@@ -4,7 +4,7 @@ import {
     Plus, Image as ImageIcon, Send, Video, X, Camera, CheckCircle2, Clock, 
     Loader2, Home, ListCheck, Users, TrendingUp, Zap, LogOut, FileText, 
     CheckCircle, History, ExternalLink, Trash2, Search, Calendar, Phone,
-    Star, MessageSquare, MapPin 
+    Star, MessageSquare, MapPin, Info
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db, storage, auth } from '../firebase'; 
@@ -48,6 +48,7 @@ export default function DashboardAdmin() {
     // --- ÉTATS AVIS ---
     const [reviews, setReviews] = useState([]);
     const [loadingReviews, setLoadingReviews] = useState(false);
+    const [replyText, setReplyText] = useState({}); // État ajouté pour les réponses
 
     // --- HISTORIQUE & RECHERCHE ---
     const [history, setHistory] = useState([]);
@@ -247,6 +248,30 @@ export default function DashboardAdmin() {
         setLoadingReviews(false);
     };
 
+    const handleReplyReview = async (reviewId) => {
+        const text = replyText[reviewId];
+        if (!text || text.trim() === "") return alert("Veuillez saisir une réponse.");
+
+        setLoadingReviews(true);
+        try {
+            const reviewRef = doc(db, "reviews", reviewId);
+            await updateDoc(reviewRef, {
+                adminReply: text,
+                repliedAt: serverTimestamp(),
+                repliedBy: userData?.fullName || "Direction EDÈN Group"
+            });
+            
+            setReplyText(prev => ({ ...prev, [reviewId]: "" }));
+            fetchReviews();
+            alert("✅ Réponse publiée avec succès.");
+        } catch (err) {
+            console.error("Erreur réponse avis:", err);
+            alert("Erreur lors de l'envoi.");
+        } finally {
+            setLoadingReviews(false);
+        }
+    };
+
     const handleDeleteReview = async (id) => {
         if (!window.confirm("Supprimer cet avis client ?")) return;
         try {
@@ -277,7 +302,6 @@ export default function DashboardAdmin() {
     return (
         <div className="min-h-screen bg-[#FDFDFD] pt-20 md:pt-28 pb-10 md:pb-20 px-4 md:px-6 font-sans text-eden-dark selection:bg-eden-gold/20">
             <div className="max-w-7xl mx-auto">
-                {/* ... (Reste du JSX identique) ... */}
                 {/* HEADER */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 md:mb-16 gap-6">
                     <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
@@ -459,20 +483,48 @@ export default function DashboardAdmin() {
                                     <Clock size={20} />
                                 </button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                                 {loadingReviews ? <Loader2 className="animate-spin mx-auto col-span-2 text-eden-gold" /> : 
                                 reviews.length > 0 ? reviews.map(rev => (
-                                    <div key={rev.id} className="p-6 bg-gray-50 rounded-[2.5rem] border border-gray-100 relative group">
-                                        <button onClick={() => handleDeleteReview(rev.id)} className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 transition-colors">
-                                            <Trash2 size={16} />
+                                    <div key={rev.id} className="p-6 md:p-8 bg-gray-50 rounded-[2.5rem] border border-gray-100 relative group flex flex-col justify-between">
+                                        <button onClick={() => handleDeleteReview(rev.id)} className="absolute top-6 right-6 p-2 text-gray-300 hover:text-red-500 transition-colors">
+                                            <Trash2 size={18} />
                                         </button>
-                                        <div className="flex gap-1 mb-4">
-                                            {[...Array(5)].map((_, i) => <Star key={i} size={12} className={i < rev.rating ? "fill-eden-gold text-eden-gold" : "text-gray-200"} />)}
+                                        <div>
+                                            <div className="flex gap-1 mb-4">
+                                                {[...Array(5)].map((_, i) => <Star key={i} size={12} className={i < rev.rating ? "fill-eden-gold text-eden-gold" : "text-gray-200"} />)}
+                                            </div>
+                                            <p className="text-[12px] font-black uppercase text-eden-dark mb-2">{rev.name}</p>
+                                            <p className="text-xs text-gray-500 font-light italic mb-4 leading-relaxed">"{rev.comment}"</p>
+                                            {rev.photoUrl && <img src={rev.photoUrl} className="w-full h-40 object-cover rounded-2xl mb-4 border border-white shadow-sm" alt="Avis" />}
+                                            <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest mb-6">Reçu le {rev.createdAt?.toDate().toLocaleDateString()}</p>
                                         </div>
-                                        <p className="text-[12px] font-black uppercase text-eden-dark mb-2">{rev.name}</p>
-                                        <p className="text-xs text-gray-500 font-light italic mb-4">"{rev.comment}"</p>
-                                        {rev.photoUrl && <img src={rev.photoUrl} className="w-full h-32 object-cover rounded-2xl mb-2 border border-white" alt="Avis" />}
-                                        <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Reçu le {rev.createdAt?.toDate().toLocaleDateString()}</p>
+
+                                        {/* SECTION RÉPONSE */}
+                                        <div className="mt-4 pt-6 border-t border-gray-200/60">
+                                            {rev.adminReply ? (
+                                                <div className="bg-eden-dark p-4 rounded-2xl relative">
+                                                    <div className="absolute -top-3 left-6 bg-eden-gold text-eden-dark text-[7px] font-black px-2 py-1 rounded uppercase">Réponse EDÈN</div>
+                                                    <p className="text-[10px] text-gray-300 italic leading-relaxed">"{rev.adminReply}"</p>
+                                                    <p className="text-[7px] text-eden-gold font-black uppercase mt-2 tracking-tighter">— {rev.repliedBy}</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <textarea 
+                                                        placeholder="Réponse professionnelle..."
+                                                        value={replyText[rev.id] || ""}
+                                                        onChange={(e) => setReplyText({...replyText, [rev.id]: e.target.value})}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl p-3 text-[10px] font-bold outline-none focus:border-eden-gold/50 resize-none h-20 shadow-inner"
+                                                    />
+                                                    <button 
+                                                        onClick={() => handleReplyReview(rev.id)}
+                                                        className="w-full py-3 bg-eden-gold text-eden-dark rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-eden-dark hover:text-white transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        <Send size={12} /> Publier la réponse
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )) : <p className="col-span-2 text-center text-gray-400 text-[10px] font-black uppercase py-10">Aucun avis à modérer</p>}
                             </div>
