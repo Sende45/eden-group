@@ -23,7 +23,6 @@ const Devis = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState(null);
-  // ÉTAT AJOUTÉ : Pour la modale CGU
   const [showCGUModal, setShowCGUModal] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -59,6 +58,22 @@ const Devis = () => {
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
+  // --- NOUVELLE LOGIQUE DE REDIRECTION REGISTER ---
+  const handleAuthRedirection = () => {
+    if (!user) {
+      // Redirection vers Register en passant les données actuelles
+      navigate('/register', { 
+        state: { 
+          fromDevis: true, 
+          pendingFormData: formData,
+          selectedDate: selectedDate 
+        } 
+      });
+    } else {
+      nextStep();
+    }
+  };
+
   const poles = [
     { id: 'chantier', title: 'Fin de Chantier', icon: Construction, desc: 'Nettoyage approfondi après travaux' },
     { id: 'tertiaire', title: 'Tertiaire & Bureaux', icon: Building2, desc: 'Entretien des postes de travail et espaces communs' },
@@ -76,13 +91,11 @@ const Devis = () => {
     return day !== 0 && day !== 6;
   };
 
-  // --- LOGIQUE DE VÉRIFICATION CGU AVANT SOUMISSION ---
   const handlePreSubmit = (e) => {
     e.preventDefault();
     if (!formData.email || !formData.email.includes('@')) return alert("Veuillez entrer un email valide.");
     if (!selectedDate) return alert("Veuillez choisir une date de rendez-vous pour l'estimation.");
 
-    // Si les CGU n'ont jamais été acceptées, on ouvre la modale
     if (user && !userData?.cguAccepted) {
         setShowCGUModal(true);
     } else {
@@ -95,7 +108,6 @@ const Devis = () => {
     try {
       const clientName = userData?.fullName || userData?.nom || 'Client Externe';
       
-      // 1. Mise à jour silencieuse des CGU si nécessaire
       if (user && !userData?.cguAccepted) {
           await updateDoc(doc(db, "users", user.uid), {
               cguAccepted: true,
@@ -103,7 +115,6 @@ const Devis = () => {
           });
       }
 
-      // 2. Sauvegarde dans Firebase
       const devisRef = await addDoc(collection(db, "devis"), {
         ...formData,
         appointmentDate: selectedDate,
@@ -114,7 +125,6 @@ const Devis = () => {
         createdAt: serverTimestamp()
       });
 
-      // 3. Message dans la messagerie interne (Notification système)
       if (user) {
         await addDoc(collection(db, "messages"), {
           userId: user.uid,
@@ -162,7 +172,6 @@ const Devis = () => {
         }
       `}</style>
 
-      {/* MODALE CGU */}
       <AnimatePresence>
         {showCGUModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
@@ -284,7 +293,8 @@ const Devis = () => {
                   <button type="button" onClick={() => setStep(1)} className="text-gray-400 font-bold hover:text-eden-dark flex items-center justify-center gap-2 py-2">
                     <ArrowLeft className="w-4 h-4" /> Retour
                   </button>
-                  <button type="button" onClick={nextStep} disabled={!formData.localisation} className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 transition-all w-full sm:w-auto">
+                  {/* MODIFIÉ : On utilise handleAuthRedirection ici */}
+                  <button type="button" onClick={handleAuthRedirection} disabled={!formData.localisation} className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 transition-all w-full sm:w-auto">
                     Continuer
                   </button>
                 </div>

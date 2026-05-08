@@ -1,18 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom'; // Ajout useLocation
 import { 
-  User as UserIcon, 
-  Mail, 
-  Lock, 
-  Building2, 
-  ArrowRight, 
-  Eye, 
-  EyeOff, 
-  Loader2, 
-  AlertCircle 
+  User as UserIcon, Mail, Lock, Building2, ArrowRight, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck 
 } from 'lucide-react';
-// Firebase
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -20,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation(); // Pour récupérer les données du devis
   const { user, userData, loading: authLoading } = useAuth();
   
   const [selectedPole, setSelectedPole] = useState('chantier');
@@ -27,6 +19,7 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [acceptCGU, setAcceptCGU] = useState(false); // État CGU
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -36,13 +29,16 @@ const Register = () => {
     confirmPassword: ''
   });
 
-  // REDIRECTION AUTOMATIQUE SI DÉJÀ CONNECTÉ
   useEffect(() => {
     if (!authLoading && user && userData) {
-      // Modifié pour pointer vers /espace-client pour les clients
-      navigate(userData.role === 'admin' ? '/admin-dashboard' : '/espace-client', { replace: true });
+      // Si on vient du devis, on y retourne, sinon dashboard
+      if (location.state?.fromDevis) {
+        navigate('/devis', { state: { ...location.state, step: 3 }, replace: true });
+      } else {
+        navigate(userData.role === 'admin' ? '/admin-dashboard' : '/espace-client', { replace: true });
+      }
     }
-  }, [user, userData, authLoading, navigate]);
+  }, [user, userData, authLoading, navigate, location]);
 
   const poleOptions = [
     { id: 'chantier', label: 'Fin de Chantier' },
@@ -54,12 +50,12 @@ const Register = () => {
     e.preventDefault();
     setError('');
     
-    if (formData.password !== formData.confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+    if (!acceptCGU) {
+      setError("Vous devez accepter les CGU pour continuer.");
       return;
     }
-    if (formData.password.length < 6) {
-      setError("Le mot de passe doit contenir au moins 6 caractères.");
+    if (formData.password !== formData.confirmPassword) {
+      setError("Les mots de passe ne correspondent pas.");
       return;
     }
 
@@ -68,10 +64,7 @@ const Register = () => {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const newUser = userCredential.user;
 
-      // Logique dynamique pour la structure selon le pôle
-      const finalStructure = selectedPole === 'particulier' 
-        ? "Particulier" 
-        : (formData.structure || "Non précisé");
+      const finalStructure = selectedPole === 'particulier' ? "Particulier" : (formData.structure || "Non précisé");
 
       await setDoc(doc(db, "users", newUser.uid), {
         uid: newUser.uid,
@@ -79,15 +72,20 @@ const Register = () => {
         structure: finalStructure,
         email: formData.email.toLowerCase().trim(),
         pole: selectedPole,
-        role: 'client', 
+        role: 'client',
+        cguAccepted: true, // Validation des CGU
+        cguAcceptedAt: serverTimestamp(),
         createdAt: serverTimestamp()
       });
 
-      // Redirection après inscription réussie vers l'espace client
-      navigate('/espace-client', { replace: true }); 
+      // Redirection intelligente
+      if (location.state?.fromDevis) {
+        navigate('/devis', { state: { ...location.state, step: 3 }, replace: true });
+      } else {
+        navigate('/espace-client', { replace: true }); 
+      }
     } catch (err) {
-      console.error(err);
-      setError(err.code === 'auth/email-already-in-use' ? "Cet email est déjà utilisé." : "Erreur lors de l'inscription.");
+      setError(err.code === 'auth/email-already-in-use' ? "Cet email est déjà utilisé." : "Erreur d'inscription.");
     } finally {
       setLoading(false);
     }
@@ -109,7 +107,9 @@ const Register = () => {
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] shadow-2xl">
           <div className="text-center mb-8">
             <h1 className="font-black-mango text-3xl md:text-4xl text-eden-gold mb-2">Inscription</h1>
-            <p className="text-gray-400 text-[10px] uppercase tracking-[0.3em]">Rejoindre le réseau d'excellence</p>
+            <p className="text-gray-400 text-[10px] uppercase tracking-[0.3em]">
+              {location.state?.fromDevis ? "Créez votre compte pour valider votre devis" : "Rejoindre le réseau d'excellence"}
+            </p>
           </div>
 
           <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -152,7 +152,10 @@ const Register = () => {
 
             <div className="md:col-span-2 space-y-1">
               <label className="text-[10px] uppercase text-eden-gold font-bold ml-4">Email</label>
-              <div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} /><input required type="email" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="nom@entreprise.com"/></div>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <input required type="email" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-eden-gold/50 text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="nom@entreprise.com"/>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -173,7 +176,22 @@ const Register = () => {
               </div>
             </div>
 
-            <button disabled={loading} type="submit" className="md:col-span-2 py-5 bg-eden-gold text-white rounded-2xl font-bold uppercase tracking-widest text-[10px] mt-4 flex items-center justify-center gap-3 disabled:opacity-50">
+            {/* CASE CGU AJOUTÉE */}
+            <div className="md:col-span-2 py-2">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div 
+                  onClick={() => setAcceptCGU(!acceptCGU)}
+                  className={`mt-1 min-w-[18px] h-[18px] rounded border flex items-center justify-center transition-all ${acceptCGU ? 'bg-eden-gold border-eden-gold' : 'border-white/20 bg-white/5'}`}
+                >
+                  {acceptCGU && <ShieldCheck size={12} className="text-white" />}
+                </div>
+                <span className="text-[10px] text-gray-400 leading-relaxed uppercase font-bold tracking-wider">
+                  J'accepte les conditions générales d'utilisation et la politique de confidentialité de <span className="text-eden-gold">Edèn Group</span>.
+                </span>
+              </label>
+            </div>
+
+            <button disabled={loading || !acceptCGU} type="submit" className="md:col-span-2 py-5 bg-eden-gold text-white rounded-2xl font-bold uppercase tracking-widest text-[10px] mt-2 flex items-center justify-center gap-3 disabled:opacity-30">
               {loading ? <Loader2 className="animate-spin" size={20} /> : <>Créer mon compte <ArrowRight size={16}/></>}
             </button>
           </form>
