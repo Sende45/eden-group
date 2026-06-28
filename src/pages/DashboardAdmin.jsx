@@ -4,7 +4,7 @@ import {
     Plus, Image as ImageIcon, Send, Video, X, Camera, CheckCircle2, Clock, 
     Loader2, Home, ListCheck, Users, TrendingUp, Zap, LogOut, FileText, 
     CheckCircle, History, ExternalLink, Trash2, Search, Calendar, Phone,
-    Star, MessageSquare, MapPin, Info
+    Star, MessageSquare, MapPin, Info, User
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db, storage, auth } from '../firebase'; 
@@ -24,10 +24,12 @@ export default function DashboardAdmin() {
     const [stats, setStats] = useState({ totalToday: 0, lastReportTime: '--:--' });
     const [unreadChats, setUnreadChats] = useState([]);
     const [unreadCounts, setUnreadCounts] = useState({});
+    const [lastMessageDates, setLastMessageDates] = useState({}); 
 
     // --- ÉTATS RAPPORT ---
     const [loading, setLoading] = useState(false);
     const [selectedClient, setSelectedClient] = useState('');
+    const [clientSearch, setClientSearch] = useState(''); // MODIF: Recherche Sidebar
     const [message, setMessage] = useState('');
     const [file, setFile] = useState(null);
     const [fileType, setFileType] = useState(null); 
@@ -48,7 +50,7 @@ export default function DashboardAdmin() {
     // --- ÉTATS AVIS ---
     const [reviews, setReviews] = useState([]);
     const [loadingReviews, setLoadingReviews] = useState(false);
-    const [replyText, setReplyText] = useState({}); // État ajouté pour les réponses
+    const [replyText, setReplyText] = useState({}); 
 
     // --- HISTORIQUE & RECHERCHE ---
     const [history, setHistory] = useState([]);
@@ -98,40 +100,46 @@ export default function DashboardAdmin() {
         };
         fetchAdminData();
 
-        const unsubChats = onSnapshot(
-            query(collection(db, "messages"), where("role", "==", "client"), where("read", "==", false)), 
-            (snapshot) => {
-                setUnreadChats(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }
-        );
-
-        const qUnread = query(collection(db, "messages"), where("role", "==", "client"), where("read", "==", false)); 
+        const qUnread = query(collection(db, "messages"), where("role", "==", "client"), where("read", "==", false), orderBy("timestamp", "desc")); 
         const unsubUnread = onSnapshot(qUnread, (snapshot) => {
             const counts = {};
+            const dates = {};
+            const msgs = [];
+            
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
+                msgs.push({ id: doc.id, ...data });
                 if (data.clientTarget) {
                     const cleanTarget = data.clientTarget.trim();
                     counts[cleanTarget] = (counts[cleanTarget] || 0) + 1;
+                    const msgDate = data.timestamp?.toDate().getTime() || 0;
+                    if (!dates[cleanTarget] || msgDate > dates[cleanTarget]) {
+                        dates[cleanTarget] = msgDate;
+                    }
                 }
             });
             setUnreadCounts(counts);
+            setLastMessageDates(dates);
+            setUnreadChats(msgs);
         });
 
-        return () => {
-            unsubChats();
-            unsubUnread();
-        };
+        return () => unsubUnread();
     }, []);
 
+    // MODIF: Tri et filtrage Sidebar
     const sortedClients = useMemo(() => {
-        return [...clients].sort((a, b) => {
-            const countA = unreadCounts[a.fullName?.trim()] || 0;
-            const countB = unreadCounts[b.fullName?.trim()] || 0;
-            if (countB !== countA) return countB - countA;
-            return a.fullName.localeCompare(b.fullName);
-        });
-    }, [clients, unreadCounts]);
+        return [...clients]
+            .filter(c => c.fullName?.toLowerCase().includes(clientSearch.toLowerCase()))
+            .sort((a, b) => {
+                const countA = unreadCounts[a.fullName?.trim()] || 0;
+                const countB = unreadCounts[b.fullName?.trim()] || 0;
+                const dateA = lastMessageDates[a.fullName?.trim()] || 0;
+                const dateB = lastMessageDates[b.fullName?.trim()] || 0;
+                if (countB !== countA) return countB - countA;
+                if (dateB !== dateA) return dateB - dateA;
+                return a.fullName.localeCompare(b.fullName);
+            });
+    }, [clients, unreadCounts, lastMessageDates, clientSearch]);
 
     const fetchPendingDevis = async () => {
         setLoadingDevis(true);
@@ -150,10 +158,8 @@ export default function DashboardAdmin() {
     const handleApproveDevis = async (devis) => {
         let prixSaisi = prompt(`Montant définitif pour ${devis.clientName || devis.email} (€) :`);
         if (!prixSaisi) return;
-        
         prixSaisi = prixSaisi.replace(',', '.').trim();
         const prixNumerique = parseFloat(prixSaisi);
-
         if (isNaN(prixNumerique)) return alert("Veuillez saisir un montant numérique valide.");
 
         setLoadingDevis(true);
@@ -165,7 +171,6 @@ export default function DashboardAdmin() {
                 validatedAt: serverTimestamp() 
             });
 
-            // ENVOI DANS LA MESSAGERIE INTERNE AU LIEU DE EMAILJS
             if (devis.userId && devis.userId !== 'anonyme') {
                 await addDoc(collection(db, "messages"), {
                     userId: devis.userId,
@@ -178,16 +183,10 @@ export default function DashboardAdmin() {
                     read: false
                 });
             }
-
             setDevisList(prev => prev.filter(d => d.id !== devis.id));
             fetchPendingDevis(); 
-            alert(`✅ Prix validé (${prixNumerique}€) ! Le client a été notifié dans sa messagerie.`);
-        } catch (error) { 
-            console.error(error);
-            alert("Erreur lors de la validation.");
-        } finally {
-            setLoadingDevis(false);
-        }
+            alert(`✅ Prix validé (${prixNumerique}€) ! Le client a été notifié.`);
+        } catch (error) { console.error(error); } finally { setLoadingDevis(false); }
     };
 
     const handleUpload = async (e) => {
@@ -201,7 +200,6 @@ export default function DashboardAdmin() {
                 await uploadBytes(storageRef, file);
                 mediaUrl = await getDownloadURL(storageRef);
             }
-
             const targetClient = clients.find(c => c.fullName === selectedClient);
             const completedTasks = tasks.filter(t => t.completed).map(t => `✅ ${t.label}`).join('\n');
             const finalMessage = completedTasks ? `${message}\n\nPoints de contrôle :\n${completedTasks}` : message;
@@ -213,19 +211,17 @@ export default function DashboardAdmin() {
                 senderName: userData?.fullName || "Agent EDÈN",
                 role: 'admin',
                 clientTarget: selectedClient, 
-                userId: targetClient?.uid || targetClient?.id, // Important pour que le client le voit
+                userId: targetClient?.uid || targetClient?.id, 
                 timestamp: serverTimestamp(),
                 location: selectedClient,
                 type: "Rapport d'Intervention",
                 pole: targetClient?.pole || "Service",
                 read: false 
             });
-
             setFile(null); setPreview(null); setMessage(''); setTasks(tasks.map(t => ({ ...t, completed: false })));
             fetchHistory();
-            alert("🚀 Rapport propulsé dans la messagerie du client !");
-        } catch (error) { console.error(error); } 
-        finally { setLoading(false); }
+            alert("🚀 Rapport propulsé !");
+        } catch (error) { console.error(error); } finally { setLoading(false); }
     };
 
     const fetchHistory = async () => {
@@ -251,7 +247,6 @@ export default function DashboardAdmin() {
     const handleReplyReview = async (reviewId) => {
         const text = replyText[reviewId];
         if (!text || text.trim() === "") return alert("Veuillez saisir une réponse.");
-
         setLoadingReviews(true);
         try {
             const reviewRef = doc(db, "reviews", reviewId);
@@ -260,32 +255,20 @@ export default function DashboardAdmin() {
                 repliedAt: serverTimestamp(),
                 repliedBy: userData?.fullName || "Direction EDÈN Group"
             });
-            
             setReplyText(prev => ({ ...prev, [reviewId]: "" }));
             fetchReviews();
-            alert("✅ Réponse publiée avec succès.");
-        } catch (err) {
-            console.error("Erreur réponse avis:", err);
-            alert("Erreur lors de l'envoi.");
-        } finally {
-            setLoadingReviews(false);
-        }
+            alert("✅ Réponse publiée.");
+        } catch (err) { console.error(err); } finally { setLoadingReviews(false); }
     };
 
     const handleDeleteReview = async (id) => {
         if (!window.confirm("Supprimer cet avis client ?")) return;
-        try {
-            await deleteDoc(doc(db, "reviews", id));
-            fetchReviews();
-        } catch (err) { console.error(err); }
+        try { await deleteDoc(doc(db, "reviews", id)); fetchReviews(); } catch (err) { console.error(err); }
     };
 
     const handleDeleteHistoryItem = async (itemId) => {
         if (!window.confirm("Supprimer ce rapport ?")) return;
-        try {
-            await deleteDoc(doc(db, "messages", itemId));
-            fetchHistory(); 
-        } catch (e) { console.error(e); }
+        try { await deleteDoc(doc(db, "messages", itemId)); fetchHistory(); } catch (e) { console.error(e); }
     };
 
     const filteredHistory = useMemo(() => {
@@ -332,7 +315,6 @@ export default function DashboardAdmin() {
                                 </span>
                             )}
                         </motion.button>
-
                         <motion.button 
                             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                             onClick={handleLogout} 
@@ -344,101 +326,66 @@ export default function DashboardAdmin() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
-                    {/* COLONNE GAUCHE */}
-                    <div className="lg:col-span-4 space-y-6 md:space-y-8">
-                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-eden-dark p-8 md:p-10 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-eden-gold/20 blur-[80px] rounded-full group-hover:bg-eden-gold/30 transition-colors" />
-                            <TrendingUp className="text-eden-gold mb-6 group-hover:scale-110 transition-transform" size={24} />
-                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-black mb-2">Interventions du Jour</h3>
-                            <p className="text-5xl md:text-6xl font-black-mango text-white">{stats.totalToday}</p>
-                        </motion.div>
-
-                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-gray-50 shadow-2xl shadow-gray-200/50">
-                            <div className="flex justify-between items-center mb-6">
-                                <h4 className="text-[10px] uppercase font-black tracking-[0.2em] text-eden-dark">Demandes & Rendez-vous</h4>
-                                <span className="bg-eden-gold text-white text-[9px] font-black px-2.5 py-1 rounded-full">{devisList.length}</span>
+                    {/* MODIF: SIDEBAR DE NAVIGATION CLIENTS */}
+                    <aside className="lg:col-span-4 space-y-6">
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden flex flex-col h-[600px]">
+                            <div className="p-6 border-b border-gray-50 bg-gray-50/30">
+                                <h3 className="font-black-mango text-xl mb-4">Clients & Sites</h3>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filtrer les contacts..." 
+                                        value={clientSearch}
+                                        onChange={(e) => setClientSearch(e.target.value)}
+                                        className="w-full bg-white border-none rounded-2xl py-3 pl-12 pr-4 text-[10px] font-bold shadow-inner outline-none focus:ring-2 ring-eden-gold/20"
+                                    />
+                                </div>
                             </div>
-                            
-                            <div className="flex flex-wrap gap-1.5 mb-6 border-b border-gray-50 pb-6">
-                                {['Tous', 'Fin de Chantier', 'Tertiaire & Bureaux', 'Services Particuliers'].map((p) => (
-                                    <button key={p} onClick={() => setFilterPole(p)} className={`text-[8px] md:text-[9px] font-black uppercase px-3 py-1.5 rounded-lg transition-all ${filterPole === p ? 'bg-eden-dark text-white' : 'bg-gray-50 text-gray-400'}`}>
-                                        {p === 'Tous' ? 'Tout' : p.split(' ')[0]}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="space-y-4 max-h-[550px] overflow-y-auto pr-1 custom-scrollbar mb-8">
-                                <AnimatePresence mode="popLayout">
-                                    {loadingDevis ? <div className="flex justify-center py-6"><Loader2 className="animate-spin text-eden-gold" /></div> : 
-                                    devisList.filter(d => filterPole === 'Tous' || d.pole === filterPole).map(d => (
-                                        <motion.div layout key={d.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="p-5 bg-gray-50/50 rounded-3xl border border-gray-100 group hover:border-eden-gold/30 hover:bg-white hover:shadow-xl transition-all">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="truncate">
-                                                    <p className="text-[11px] font-black uppercase text-eden-dark truncate leading-tight">{d.clientName}</p>
-                                                    <p className="text-[9px] text-gray-400 font-bold">{d.email}</p>
-                                                </div>
-                                                <button onClick={() => openGpsItinerary(d.localisation)} className="p-2 bg-white border border-gray-100 rounded-lg text-eden-gold hover:scale-110 shadow-sm transition-transform">
-                                                    <MapPin size={14} />
-                                                </button>
+                            <div className="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                                {sortedClients.map((c) => {
+                                    const count = unreadCounts[c.fullName?.trim()] || 0;
+                                    const isActive = selectedClient === c.fullName;
+                                    return (
+                                        <motion.button
+                                            key={c.id}
+                                            onClick={() => setSelectedClient(c.fullName)}
+                                            whileTap={{ scale: 0.98 }}
+                                            className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all relative ${isActive ? 'bg-eden-dark text-white shadow-xl' : 'hover:bg-gray-50'}`}
+                                        >
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isActive ? 'bg-eden-gold text-eden-dark' : 'bg-gray-100 text-eden-gold'}`}>
+                                                <User size={18} />
                                             </div>
-
-                                            <div className="grid grid-cols-2 gap-2 mb-4 bg-white/50 p-3 rounded-2xl border border-gray-50">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[7px] uppercase text-gray-400 font-black">Surface</span>
-                                                    <span className="text-[10px] font-bold">{d.surface} m²</span>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[7px] uppercase text-gray-400 font-black">Fréquence</span>
-                                                    <span className="text-[10px] font-bold capitalize">{d.frequence}</span>
-                                                </div>
-                                                <div className="col-span-2 border-t border-gray-50 pt-2 mt-1">
-                                                    <span className="text-[7px] uppercase text-gray-400 font-black">Localisation</span>
-                                                    <p className="text-[9px] font-bold">{d.localisation || "Non précisée"}</p>
-                                                </div>
+                                            <div className="text-left overflow-hidden">
+                                                <p className={`text-[10px] font-black uppercase truncate ${isActive ? 'text-white' : 'text-eden-dark'}`}>{c.fullName}</p>
+                                                <p className="text-[8px] font-bold text-gray-400 truncate">{c.structure || 'Client Particulier'}</p>
                                             </div>
-
-                                            {d.appointmentDate && (
-                                                <div className="mb-4 p-2 bg-eden-dark text-white rounded-xl text-center shadow-md">
-                                                    <p className="text-[9px] font-black uppercase">
-                                                        📅 RDV ESTIMATION : {d.appointmentDate.toDate().toLocaleString('fr-FR', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})}
-                                                    </p>
-                                                </div>
+                                            {count > 0 && (
+                                                <span className="ml-auto w-5 h-5 bg-eden-gold text-eden-dark rounded-full flex items-center justify-center text-[9px] font-black">{count}</span>
                                             )}
-
-                                            <div className="flex gap-2">
-                                                <a href={`tel:${d.phone || '0780801642'}`} className="p-3 bg-white border border-gray-100 rounded-xl text-eden-dark hover:text-eden-gold transition-all"><Phone size={14} /></a>
-                                                <button onClick={() => handleApproveDevis(d)} className="flex-grow py-3 bg-eden-gold text-eden-dark rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-eden-dark hover:text-white transition-all shadow-sm">Envoyer le Prix</button>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </AnimatePresence>
+                                        </motion.button>
+                                    );
+                                })}
                             </div>
                         </motion.div>
-                    </div>
 
-                    {/* COLONNE DROITE */}
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-eden-dark p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-eden-gold/20 blur-[80px] rounded-full" />
+                            <TrendingUp className="text-eden-gold mb-6" size={24} />
+                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-black mb-2">Interventions du Jour</h3>
+                            <p className="text-5xl font-black-mango text-white">{stats.totalToday}</p>
+                        </motion.div>
+                    </aside>
+
+                    {/* COLONNE DROITE : RAPPORT & ACTIONS */}
                     <div className="lg:col-span-8 space-y-8 md:space-y-12">
                         <motion.section initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl shadow-gray-200/50">
-                            <h2 className="font-black-mango text-3xl md:text-4xl mb-8 tracking-tight">Rapport d'Intervention</h2>
-                            <form onSubmit={handleUpload} className="space-y-8 md:space-y-10">
-                                <div className="space-y-3 md:space-y-4">
-                                    <label className="text-[10px] uppercase font-black text-gray-400 ml-4 tracking-[0.2em]">Destinataire</label>
-                                    <div className="relative">
-                                        <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-eden-gold z-10" size={18} />
-                                        <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="w-full bg-gray-50/50 border-2 border-gray-50 rounded-2xl py-4 pl-12 pr-6 outline-none focus:border-eden-gold/30 focus:bg-white text-xs md:text-sm font-black appearance-none cursor-pointer shadow-inner relative z-0">
-                                            {sortedClients.map(c => {
-                                                const count = unreadCounts[c.fullName?.trim()] || 0;
-                                                return (
-                                                    <option key={c.id} value={c.fullName}>
-                                                        {count > 0 ? `[${count}] ` : ''} 
-                                                        {c.fullName} — {c.structure || 'Client'}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                    </div>
-                                </div>
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                                <h2 className="font-black-mango text-3xl md:text-4xl tracking-tight leading-tight">Rapport : {selectedClient}</h2>
+                                <span className="bg-eden-gold/10 text-eden-gold text-[9px] font-black px-4 py-2 rounded-full uppercase tracking-widest border border-eden-gold/20">Site Sélectionné</span>
+                            </div>
 
+                            <form onSubmit={handleUpload} className="space-y-8 md:space-y-10">
                                 <div className="bg-gray-50/50 p-6 md:p-8 rounded-[2rem] border border-gray-50 space-y-5 shadow-inner">
                                     <div className="flex items-center gap-3 mb-1">
                                         <ListCheck className="text-eden-gold" size={20} />
@@ -474,109 +421,107 @@ export default function DashboardAdmin() {
                             </form>
                         </motion.section>
 
-                        <section className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl shadow-gray-200/50">
-                            <div className="flex justify-between items-center mb-10">
-                                <h2 className="font-black-mango text-3xl md:text-4xl tracking-tight flex items-center gap-4">
-                                    <Star className="text-eden-gold" /> Modération Avis
-                                </h2>
-                                <button onClick={fetchReviews} className="p-3 bg-gray-50 rounded-full text-eden-gold hover:rotate-180 transition-transform duration-500">
-                                    <Clock size={20} />
-                                </button>
+                        {/* SECTION DEVIS */}
+                        <section className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl">
+                             <div className="flex justify-between items-center mb-6">
+                                <h4 className="text-[10px] uppercase font-black tracking-[0.2em] text-eden-dark">Demandes & Rendez-vous</h4>
+                                <span className="bg-eden-gold text-white text-[9px] font-black px-2.5 py-1 rounded-full">{devisList.length}</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                                {loadingReviews ? <Loader2 className="animate-spin mx-auto col-span-2 text-eden-gold" /> : 
-                                reviews.length > 0 ? reviews.map(rev => (
-                                    <div key={rev.id} className="p-6 md:p-8 bg-gray-50 rounded-[2.5rem] border border-gray-100 relative group flex flex-col justify-between">
-                                        <button onClick={() => handleDeleteReview(rev.id)} className="absolute top-6 right-6 p-2 text-gray-300 hover:text-red-500 transition-colors">
-                                            <Trash2 size={18} />
-                                        </button>
-                                        <div>
-                                            <div className="flex gap-1 mb-4">
-                                                {[...Array(5)].map((_, i) => <Star key={i} size={12} className={i < rev.rating ? "fill-eden-gold text-eden-gold" : "text-gray-200"} />)}
+                            <div className="flex flex-wrap gap-1.5 mb-6 border-b border-gray-50 pb-6">
+                                {['Tous', 'Fin de Chantier', 'Tertiaire & Bureaux', 'Services Particuliers'].map((p) => (
+                                    <button key={p} onClick={() => setFilterPole(p)} className={`text-[8px] md:text-[9px] font-black uppercase px-3 py-1.5 rounded-lg transition-all ${filterPole === p ? 'bg-eden-dark text-white' : 'bg-gray-50 text-gray-400'}`}>
+                                        {p === 'Tous' ? 'Tout' : p.split(' ')[0]}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
+                                <AnimatePresence mode="popLayout">
+                                    {devisList.filter(d => filterPole === 'Tous' || d.pole === filterPole).map(d => (
+                                        <motion.div layout key={d.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-gray-50/50 rounded-3xl border border-gray-100 hover:border-eden-gold/30 hover:bg-white hover:shadow-xl transition-all">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="truncate">
+                                                    <p className="text-[11px] font-black uppercase text-eden-dark truncate leading-tight">{d.clientName}</p>
+                                                    <p className="text-[9px] text-gray-400 font-bold">{d.email}</p>
+                                                </div>
+                                                <button onClick={() => openGpsItinerary(d.localisation)} className="p-2 bg-white border border-gray-100 rounded-lg text-eden-gold shadow-sm"><MapPin size={14} /></button>
                                             </div>
+                                            <div className="grid grid-cols-2 gap-2 mb-4 bg-white/50 p-3 rounded-2xl border border-gray-50">
+                                                <div className="flex flex-col"><span className="text-[7px] uppercase text-gray-400 font-black">Surface</span><span className="text-[10px] font-bold">{d.surface} m²</span></div>
+                                                <div className="flex flex-col"><span className="text-[7px] uppercase text-gray-400 font-black">Fréquence</span><span className="text-[10px] font-bold capitalize">{d.frequence}</span></div>
+                                            </div>
+                                            {d.appointmentDate && (
+                                                <div className="mb-4 p-2 bg-eden-dark text-white rounded-xl text-center"><p className="text-[9px] font-black uppercase">📅 RDV ESTIMATION : {d.appointmentDate.toDate().toLocaleString('fr-FR')}</p></div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <a href={`tel:${d.phone || '0780801642'}`} className="p-3 bg-white border border-gray-100 rounded-xl text-eden-dark"><Phone size={14} /></a>
+                                                <button onClick={() => handleApproveDevis(d)} className="flex-grow py-3 bg-eden-gold text-eden-dark rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-eden-dark hover:text-white transition-all shadow-sm">Envoyer le Prix</button>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        </section>
+
+                        {/* SECTION AVIS */}
+                        <section className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl">
+                            <div className="flex justify-between items-center mb-10">
+                                <h2 className="font-black-mango text-3xl md:text-4xl flex items-center gap-4"><Star className="text-eden-gold" /> Modération Avis</h2>
+                                <button onClick={fetchReviews} className="p-3 bg-gray-50 rounded-full text-eden-gold"><Clock size={20} /></button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {reviews.map(rev => (
+                                    <div key={rev.id} className="p-6 md:p-8 bg-gray-50 rounded-[2.5rem] border border-gray-100 relative flex flex-col justify-between">
+                                        <button onClick={() => handleDeleteReview(rev.id)} className="absolute top-6 right-6 p-2 text-gray-300 hover:text-red-500"><Trash2 size={18} /></button>
+                                        <div>
+                                            <div className="flex gap-1 mb-4">{[...Array(5)].map((_, i) => <Star key={i} size={12} className={i < rev.rating ? "fill-eden-gold text-eden-gold" : "text-gray-200"} />)}</div>
                                             <p className="text-[12px] font-black uppercase text-eden-dark mb-2">{rev.name}</p>
                                             <p className="text-xs text-gray-500 font-light italic mb-4 leading-relaxed">"{rev.comment}"</p>
-                                            {rev.photoUrl && <img src={rev.photoUrl} className="w-full h-40 object-cover rounded-2xl mb-4 border border-white shadow-sm" alt="Avis" />}
+                                            {rev.photoUrl && <img src={rev.photoUrl} className="w-full h-40 object-cover rounded-2xl mb-4 border border-white" alt="Avis" />}
                                             <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest mb-6">Reçu le {rev.createdAt?.toDate().toLocaleDateString()}</p>
                                         </div>
-
-                                        {/* SECTION RÉPONSE */}
                                         <div className="mt-4 pt-6 border-t border-gray-200/60">
                                             {rev.adminReply ? (
-                                                <div className="bg-eden-dark p-4 rounded-2xl relative">
-                                                    <div className="absolute -top-3 left-6 bg-eden-gold text-eden-dark text-[7px] font-black px-2 py-1 rounded uppercase">Réponse EDÈN</div>
-                                                    <p className="text-[10px] text-gray-300 italic leading-relaxed">"{rev.adminReply}"</p>
-                                                    <p className="text-[7px] text-eden-gold font-black uppercase mt-2 tracking-tighter">— {rev.repliedBy}</p>
-                                                </div>
+                                                <div className="bg-eden-dark p-4 rounded-2xl relative"><div className="absolute -top-3 left-6 bg-eden-gold text-eden-dark text-[7px] font-black px-2 py-1 rounded uppercase">Réponse EDÈN</div><p className="text-[10px] text-gray-300 italic leading-relaxed">"{rev.adminReply}"</p></div>
                                             ) : (
                                                 <div className="space-y-3">
-                                                    <textarea 
-                                                        placeholder="Réponse professionnelle..."
-                                                        value={replyText[rev.id] || ""}
-                                                        onChange={(e) => setReplyText({...replyText, [rev.id]: e.target.value})}
-                                                        className="w-full bg-white border border-gray-200 rounded-xl p-3 text-[10px] font-bold outline-none focus:border-eden-gold/50 resize-none h-20 shadow-inner"
-                                                    />
-                                                    <button 
-                                                        onClick={() => handleReplyReview(rev.id)}
-                                                        className="w-full py-3 bg-eden-gold text-eden-dark rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-eden-dark hover:text-white transition-all flex items-center justify-center gap-2"
-                                                    >
-                                                        <Send size={12} /> Publier la réponse
-                                                    </button>
+                                                    <textarea placeholder="Réponse pro..." value={replyText[rev.id] || ""} onChange={(e) => setReplyText({...replyText, [rev.id]: e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl p-3 text-[10px] font-bold outline-none h-20 shadow-inner" />
+                                                    <button onClick={() => handleReplyReview(rev.id)} className="w-full py-3 bg-eden-gold text-eden-dark rounded-xl text-[8px] font-black uppercase hover:bg-eden-dark hover:text-white transition-all"><Send size={12} className="inline mr-2" /> Publier</button>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                )) : <p className="col-span-2 text-center text-gray-400 text-[10px] font-black uppercase py-10">Aucun avis à modérer</p>}
+                                ))}
                             </div>
                         </section>
 
-                        <section className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl shadow-gray-200/50">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 md:mb-12">
+                        {/* SECTION HISTORIQUE */}
+                        <section className="bg-white p-6 md:p-14 rounded-[2.5rem] md:rounded-[4rem] border border-gray-50 shadow-2xl">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                                 <h2 className="font-black-mango text-2xl md:text-3xl flex items-center gap-4"><History className="text-eden-gold" size={24} /> Historique Admin</h2>
-                                <div className="relative w-full md:w-80">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
-                                    <input type="text" placeholder="Filtrer par client..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-50 rounded-full py-3 pl-12 pr-6 outline-none focus:border-eden-gold/30 text-[12px] font-black shadow-inner" />
-                                </div>
+                                <div className="relative w-full md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} /><input type="text" placeholder="Filtrer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-50 rounded-full py-3 pl-12 pr-6 outline-none text-[12px] font-black" /></div>
                             </div>
-                            <div className="space-y-4 md:space-y-6">
-                                {loadingHistory ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-eden-gold" /></div> : 
-                                filteredHistory.map((item) => {
-                                    const isNew = item.read === false;
-                                    return (
-                                        <div key={item.id} className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-2xl transition-all group gap-4 shadow-sm border ${
-                                            isNew ? 'bg-eden-gold/5 border-eden-gold/30 ring-1 ring-eden-gold/10' : 'bg-gray-50/50 border-gray-100 hover:bg-white'
-                                        }`}>
-                                            <div className="flex items-center gap-4">
-                                                <div className={`p-3 rounded-xl shadow-sm transition-all transform group-hover:rotate-6 ${
-                                                    isNew ? 'bg-eden-gold text-eden-dark' : 'bg-white text-eden-gold group-hover:bg-eden-dark group-hover:text-white'
-                                                }`}>
-                                                    <Zap size={18} />
-                                                </div>
-                                                <div className="truncate">
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="text-[11px] md:text-[13px] font-black uppercase text-eden-dark truncate">{item.clientTarget}</h4>
-                                                        {isNew && <span className="bg-eden-gold text-eden-dark text-[7px] font-black px-1.5 py-0.5 rounded uppercase animate-pulse">Nouveau</span>}
-                                                    </div>
-                                                    <p className="text-[9px] md:text-[11px] text-gray-400 font-bold uppercase tracking-widest">{item.timestamp?.toDate().toLocaleDateString()} • {item.type}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                {item.mediaUrl && <a href={item.mediaUrl} target="_blank" rel="noreferrer" className="p-2.5 bg-white rounded-xl border border-gray-100 text-gray-400 hover:text-eden-gold transition-all"><ExternalLink size={16} /></a>}
-                                                <button onClick={() => handleDeleteHistoryItem(item.id)} className="p-2.5 text-gray-300 hover:text-red-500 transition-all rounded-xl"><Trash2 size={16} /></button>
-                                            </div>
+                            <div className="space-y-4">
+                                {filteredHistory.map((item) => (
+                                    <div key={item.id} className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-2xl border shadow-sm ${item.read === false ? 'bg-eden-gold/5 border-eden-gold/30' : 'bg-gray-50/50 border-gray-100 hover:bg-white transition-all'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`p-3 rounded-xl ${item.read === false ? 'bg-eden-gold text-eden-dark' : 'bg-white text-eden-gold'}`}><Zap size={18} /></div>
+                                            <div className="truncate"><div className="flex items-center gap-2"><h4 className="text-[11px] md:text-[13px] font-black uppercase truncate">{item.clientTarget}</h4>{item.read === false && <span className="bg-eden-gold text-eden-dark text-[7px] font-black px-1.5 py-0.5 rounded animate-pulse">Nouveau</span>}</div><p className="text-[9px] md:text-[11px] text-gray-400 font-bold uppercase tracking-widest">{item.timestamp?.toDate().toLocaleDateString()} • {item.type}</p></div>
                                         </div>
-                                    );
-                                })}
+                                        <div className="flex items-center gap-3">{item.mediaUrl && <a href={item.mediaUrl} target="_blank" rel="noreferrer" className="p-2.5 bg-white rounded-xl border border-gray-100 text-gray-400 hover:text-eden-gold"><ExternalLink size={16} /></a>}<button onClick={() => handleDeleteHistoryItem(item.id)} className="p-2.5 text-gray-300 hover:text-red-500"><Trash2 size={16} /></button></div>
+                                    </div>
+                                ))}
                             </div>
                         </section>
                     </div>
                 </div>
             </div>
             {/* Arrière-plan décoratif */}
-            <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">
-                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-eden-gold/5 blur-[120px] rounded-full" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-eden-dark/5 blur-[120px] rounded-full" />
-            </div>
+            <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden"><div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-eden-gold/5 blur-[120px] rounded-full" /><div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-eden-dark/5 blur-[120px] rounded-full" /></div>
+            <style dangerouslySetInnerHTML={{ __html: `
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #B8976A33; border-radius: 10px; }
+            `}} />
         </div>
     );
 }

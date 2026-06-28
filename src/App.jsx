@@ -6,7 +6,8 @@ import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Import des pages
-import Portal from './pages/Portal'; 
+// Supprimez l'import de Portal
+// import Portal from './pages/Portal'; // À SUPPRIMER
 import Home from './pages/Home';
 import Devis from './pages/Devis';
 import Login from './pages/Login';
@@ -25,7 +26,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 
 // --- COMPOSANT DE PROTECTION DE ROUTE OPTIMISÉ ---
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const ProtectedRoute = ({ children, adminOnly = false, clientOnly = false }) => {
   const { user, userData, loading } = useAuth();
 
   if (loading) return (
@@ -39,8 +40,11 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   if (adminOnly && userData?.role !== 'admin') {
-    // MODIF 1 : Redirection vers espace-client si un non-admin tente d'accéder à l'admin
     return <Navigate to="/espace-client" replace />;
+  }
+
+  if (clientOnly && userData?.role === 'admin') {
+    return <Navigate to="/admin-dashboard" replace />;
   }
 
   return children;
@@ -57,12 +61,13 @@ const ScrollToTop = () => {
 const LayoutWrapper = ({ children }) => {
   const location = useLocation();
   
-  const isPortal = location.pathname === '/';
-  // MODIF 2 : Mise à jour de la détection pour inclure le nouveau chemin
+  // La racine ("/") n'est plus le portal mais l'accueil
+  const isHome = location.pathname === '/';
   const isDashboard = location.pathname.includes('dashboard') || location.pathname.includes('espace-client');
   const isMessages = location.pathname === '/messages';
   
-  const hideLayout = isPortal || isDashboard || isMessages;
+  // Cache le Header/Footer sur les dashboards et messages, mais PAS sur la page d'accueil
+  const hideLayout = isDashboard || isMessages;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#FDFDFD] selection:bg-eden-gold/20 selection:text-eden-dark">
@@ -87,18 +92,18 @@ function App() {
       <AuthProvider>
         <LayoutWrapper>
           <Routes>
-            {/* PORTAL */}
-            <Route path="/" element={<Portal />} />
+            {/* Page d'accueil à la racine */}
+            <Route path="/" element={<Home />} />
 
             {/* Routes Publiques */}
-            <Route path="/accueil" element={<Home />} />
+            <Route path="/accueil" element={<Home />} /> {/* Optionnel : garder /accueil comme alias */}
             <Route path="/services" element={<Services />} /> 
             <Route path="/devis" element={<Devis />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             
-            {/* PAGE LÉGALE (POINT GOOGLE PLAY CONSOLE) */}
+            {/* PAGE LÉGALE */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
             {/* MESSAGERIE PROTÉGÉE */}
@@ -111,11 +116,11 @@ function App() {
               } 
             />
 
-            {/* Espace Privé Client - AJOUT DU /* POUR LE PROFIL */}
+            {/* Espace Privé Client */}
             <Route 
               path="/espace-client/*" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute clientOnly={true}>
                   <EspaceClient />
                 </ProtectedRoute>
               } 
@@ -131,6 +136,7 @@ function App() {
               } 
             />
             
+            {/* Redirection 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </LayoutWrapper>
