@@ -54,7 +54,7 @@ const Login = () => {
         navigate('/espace-client', { replace: true });
       }
     } catch (error) {
-      console.error("Login Error:", error.code);
+      console.error("Login Error:", error.code, error.message);
       switch (error.code) {
         case 'auth/invalid-email':
           setError("L'adresse email n'est pas conforme.");
