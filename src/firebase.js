@@ -1,3 +1,4 @@
+// src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported as analyticsIsSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
@@ -37,18 +38,26 @@ if (Capacitor.isNativePlatform()) {
 
   initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
 } else {
-  // WEB / PWA : provider reCAPTCHA Enterprise.
-  // En dev, on autorise un jeton de debug (le token s'affiche dans la console navigateur).
+  // WEB / PWA : reCAPTCHA Enterprise.
+  // La clé de SITE (publique) est créée dans Google Cloud → Security → reCAPTCHA,
+  // enregistrée dans Firebase → App Check → app web (fournisseur "reCAPTCHA Enterprise"),
+  // et lue depuis le fichier .env à la racine : VITE_RECAPTCHA_ENTERPRISE_KEY=6L...
+  const cleRecaptcha = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY;
+
+  // En dev (npm run dev), jeton de debug : il s'affiche dans la console du navigateur
+  // et doit être ajouté une fois dans Firebase → App Check → app web → Gérer les jetons de debug.
   if (import.meta.env.DEV) {
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
 
-  initializeAppCheck(app, {
-    provider: new ReCaptchaEnterpriseProvider("TA_CLE_SITE_RECAPTCHA_ENTERPRISE"),
-    // Alternative gratuite : new ReCaptchaV3Provider("TA_CLE_SITE_V3")
-    // (importer ReCaptchaV3Provider depuis "firebase/app-check").
-    isTokenAutoRefreshEnabled: true,
-  });
+  if (cleRecaptcha) {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(cleRecaptcha),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } else {
+    console.warn("App Check désactivé sur le web : VITE_RECAPTCHA_ENTERPRISE_KEY manquante dans .env");
+  }
 }
 
 // Analytics : uniquement là où c'est supporté (évite un crash dans le webview natif).
