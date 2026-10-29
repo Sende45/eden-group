@@ -7,6 +7,7 @@ import { FileText, ChevronRight, Search, Filter, Download, Zap, X, Calendar, Map
 import { useAuth } from '../context/AuthContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { lignesDetails, titreDetails } from '../utils/detailsDevis';
 
 const FORMAT_DATE = { day: 'numeric', month: 'short', year: 'numeric' };
 
@@ -72,12 +73,54 @@ const Historique = () => {
         headStyles: { fillColor: gold },
       });
 
-      const finY = pdf.lastAutoTable?.finalY ?? 100;
-      pdf.setFontSize(12);
-      pdf.text('Details :', 15, finY + 15);
-      pdf.setFontSize(10);
-      const splitText = pdf.splitTextToSize(pdfTexte(item.text || item.message || 'Details valides par EDEN Group.'), 180);
-      pdf.text(splitText, 15, finY + 25);
+      let y = pdf.lastAutoTable?.finalY ?? 100;
+
+      // Informations de l'intervention (devis)
+      if (item.source === 'devis') {
+        const infos = [
+          ['Localisation', item.localisation || '-'],
+          ...(item.surface ? [['Surface approximative', `${item.surface} m2`]] : []),
+          ['Frequence', item.frequence || '-'],
+          ...(item.appointmentDate?.toDate ? [["Rendez-vous d'estimation", item.appointmentDate.toDate().toLocaleString('fr-FR')]] : []),
+        ];
+        autoTable(pdf, {
+          startY: y + 8,
+          head: [['INFORMATIONS', '']],
+          body: infos.map(([a, b]) => [pdfTexte(a), pdfTexte(b)]),
+          theme: 'striped',
+          headStyles: { fillColor: dark },
+          columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+        });
+        y = pdf.lastAutoTable?.finalY ?? y;
+
+        // Les locaux / Le logement
+        const details = lignesDetails(item);
+        if (details.length) {
+          autoTable(pdf, {
+            startY: y + 8,
+            head: [[pdfTexte(titreDetails(item.pole).toUpperCase()), '']],
+            body: details.map(([a, b]) => [pdfTexte(a), pdfTexte(b)]),
+            theme: 'striped',
+            headStyles: { fillColor: gold },
+            columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+          });
+          y = pdf.lastAutoTable?.finalY ?? y;
+        }
+      }
+
+      const texteLibre = item.text || item.message;
+      if (texteLibre) {
+        // Nouvelle page si on arrive trop bas
+        if (y > 240) {
+          pdf.addPage();
+          y = 10;
+        }
+        pdf.setFontSize(12);
+        pdf.setTextColor(...dark);
+        pdf.text(item.source === 'devis' ? 'Precisions du client :' : 'Details :', 15, y + 15);
+        pdf.setFontSize(10);
+        pdf.text(pdf.splitTextToSize(pdfTexte(texteLibre), 180), 15, y + 23);
+      }
 
       if (item.source === 'devis' && item.confirmedAt?.toDate) {
         pdf.setFontSize(9);
@@ -375,6 +418,21 @@ const Historique = () => {
                     <Euro size={14} className="text-eden-gold" /> Prix proposé
                   </span>
                   <span className="text-2xl font-black text-eden-dark">{selection.prixDefinitif} € HT</span>
+                </div>
+              ) : null}
+
+              {/* Les locaux / Le logement */}
+              {selection.source === 'devis' && lignesDetails(selection).length > 0 ? (
+                <div className="mt-6">
+                  <p className="text-xs font-black uppercase tracking-widest text-eden-dark mb-3">{titreDetails(selection.pole)}</p>
+                  <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100">
+                    {lignesDetails(selection).map(([libelle, valeur]) => (
+                      <div key={libelle} className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+                        <span className="text-gray-500">{libelle}</span>
+                        <span className="font-bold text-eden-dark">{valeur}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 

@@ -1,9 +1,10 @@
+// src/pages/Devis.jsx
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Construction, Building2, UserCheck, MapPin, Ruler, ArrowLeft, Send, 
-  Loader2, Calendar, Phone, MessageCircle, ShieldCheck, CheckCircle 
+import {
+  Construction, Building2, UserCheck, MapPin, Ruler, ArrowLeft, Send,
+  Loader2, Calendar, Phone, MessageCircle, ShieldCheck, CheckCircle, Home
 } from 'lucide-react';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -12,14 +13,70 @@ import fr from 'date-fns/locale/fr';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import {
+  estParticulier, estTertiaire, nettoyerDetails, PRESTATIONS_PARTICULIER, TYPES_LOGEMENT,
+} from '../utils/detailsDevis';
 
 registerLocale('fr', fr);
+
+const DETAILS_VIDES = {
+  // Tertiaire & Bureaux
+  nombrePieces: '',
+  nombrePostes: '',
+  nombreToilettes: '',
+  refectoire: null,
+  // Services Particuliers (nombrePieces et nombreToilettes sont partagés)
+  typeLogement: '',
+  nombreSallesDeBain: '',
+  animaux: null,
+  prestation: '',
+};
+
+/** Champ numérique compact */
+const ChampNombre = ({ label, valeur, onChange, requis, placeholder }) => (
+  <div>
+    <label className="block text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+      {label}{requis ? ' *' : ''}
+    </label>
+    <input
+      type="number" min="0" inputMode="numeric"
+      value={valeur}
+      onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ''))}
+      placeholder={placeholder}
+      className="w-full p-3 rounded-xl border border-gray-200 focus:border-eden-gold outline-none bg-white font-bold text-sm"
+    />
+  </div>
+);
+
+/** Choix parmi quelques options (boutons) */
+const Choix = ({ label, options, valeur, onChange }) => (
+  <div>
+    <label className="block text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">{label}</label>
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <button
+          key={String(o.id)} type="button"
+          onClick={() => onChange(o.id)}
+          className={`py-2.5 px-4 rounded-xl border-2 font-bold text-[11px] md:text-xs transition-all ${valeur === o.id ? 'border-eden-gold bg-eden-gold text-white shadow-lg' : 'border-white bg-white hover:border-eden-gold/30'}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+const OUI_NON = [
+  { id: true, label: 'Oui' },
+  { id: false, label: 'Non' },
+];
 
 const Devis = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, userData } = useAuth();
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -32,47 +89,17 @@ const Devis = () => {
     frequence: 'ponctuel',
     email: '',
     message: '',
-    appointmentDate: null
+    appointmentDate: null,
+    details: { ...DETAILS_VIDES },
   });
+
+  const majDetails = (cle, valeur) =>
+    setFormData((prev) => ({ ...prev, details: { ...prev.details, [cle]: valeur } }));
 
   const minTime = new Date();
   minTime.setHours(8, 0, 0);
   const maxTime = new Date();
   maxTime.setHours(18, 0, 0);
-
-  useEffect(() => {
-    if (user) {
-      setFormData(prev => ({ ...prev, email: user.email }));
-    }
-
-    const typeParam = searchParams.get('type');
-    if (typeParam) {
-      const selectedPole = poles.find(p => p.id === typeParam);
-      if (selectedPole) {
-        setFormData(prev => ({ ...prev, pole: selectedPole.title }));
-        setStep(2);
-      }
-    }
-  }, [searchParams, user]);
-
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
-
-  // --- NOUVELLE LOGIQUE DE REDIRECTION REGISTER ---
-  const handleAuthRedirection = () => {
-    if (!user) {
-      // Redirection vers Register en passant les données actuelles
-      navigate('/register', { 
-        state: { 
-          fromDevis: true, 
-          pendingFormData: formData,
-          selectedDate: selectedDate 
-        } 
-      });
-    } else {
-      nextStep();
-    }
-  };
 
   const poles = [
     { id: 'chantier', title: 'Fin de Chantier', icon: Construction, desc: 'Nettoyage approfondi après travaux' },
@@ -86,6 +113,62 @@ const Devis = () => {
     { id: 'mensuel', label: 'Mensuel' }
   ];
 
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({ ...prev, email: user.email }));
+    }
+
+    // Retour depuis l'inscription : on reprend les réponses déjà saisies
+    const etat = location.state;
+    if (etat?.fromDevis && etat.pendingFormData) {
+      setFormData(prev => ({
+        ...prev,
+        ...etat.pendingFormData,
+        details: { ...DETAILS_VIDES, ...(etat.pendingFormData.details || {}) },
+        email: user?.email || etat.pendingFormData.email || '',
+      }));
+      if (etat.selectedDate) setSelectedDate(new Date(etat.selectedDate));
+      setStep(etat.step || 3);
+      return;
+    }
+
+    const typeParam = searchParams.get('type');
+    if (typeParam) {
+      const selectedPole = poles.find(p => p.id === typeParam);
+      if (selectedPole) {
+        setFormData(prev => ({ ...prev, pole: selectedPole.title }));
+        setStep(2);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user, location.state]);
+
+  const nextStep = () => setStep(step + 1);
+  const prevStep = () => setStep(step - 1);
+
+  const tertiaire = estTertiaire(formData.pole);
+  const particulier = estParticulier(formData.pole);
+
+  // Étape 2 complète ? (le nombre de pièces est obligatoire pour bureaux et particuliers)
+  const piecesOk = !(tertiaire || particulier) || Number(formData.details.nombrePieces) >= 1;
+  const etape2Valide = !!formData.localisation && piecesOk;
+
+  // --- REDIRECTION VERS L'INSCRIPTION SI NON CONNECTÉ ---
+  const handleAuthRedirection = () => {
+    if (!etape2Valide) return;
+    if (!user) {
+      navigate('/register', {
+        state: {
+          fromDevis: true,
+          pendingFormData: formData,
+          selectedDate: selectedDate
+        }
+      });
+    } else {
+      nextStep();
+    }
+  };
+
   const isWeekday = (date) => {
     const day = date.getDay();
     return day !== 0 && day !== 6;
@@ -95,6 +178,7 @@ const Devis = () => {
     e.preventDefault();
     if (!formData.email || !formData.email.includes('@')) return alert("Veuillez entrer un email valide.");
     if (!selectedDate) return alert("Veuillez choisir une date de rendez-vous pour l'estimation.");
+    if (!piecesOk) return alert("Indiquez le nombre de pièces.");
 
     if (user && !userData?.cguAccepted) {
         setShowCGUModal(true);
@@ -107,7 +191,7 @@ const Devis = () => {
     setIsSubmitting(true);
     try {
       const clientName = userData?.fullName || userData?.nom || 'Client Externe';
-      
+
       if (user && !userData?.cguAccepted) {
           await updateDoc(doc(db, "users", user.uid), {
               cguAccepted: true,
@@ -115,8 +199,10 @@ const Devis = () => {
           });
       }
 
+      const { details, ...reste } = formData;
       const devisRef = await addDoc(collection(db, "devis"), {
-        ...formData,
+        ...reste,
+        details: nettoyerDetails(formData.pole, details), // null pour Fin de chantier
         appointmentDate: selectedDate,
         userId: user ? user.uid : 'anonyme',
         clientName: clientName,
@@ -175,12 +261,12 @@ const Devis = () => {
       <AnimatePresence>
         {showCGUModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-eden-dark/80 backdrop-blur-sm"
               onClick={() => setShowCGUModal(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
               className="relative bg-white w-full max-w-lg rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-center"
             >
@@ -191,7 +277,7 @@ const Devis = () => {
               <p className="text-gray-500 text-sm leading-relaxed mb-8">
                 Pour finaliser votre demande, veuillez accepter nos conditions générales d'utilisation. Elles garantissent la sécurité de vos données et la qualité de nos interventions.
               </p>
-              <button 
+              <button
                 onClick={() => { setShowCGUModal(false); handleSubmit(); }}
                 className="w-full py-4 bg-eden-gold text-white rounded-2xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-3 hover:shadow-lg shadow-eden-gold/30 transition-all"
               >
@@ -204,7 +290,7 @@ const Devis = () => {
 
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8 md:mb-12">
-           <motion.h1 
+           <motion.h1
              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
              className="font-black-mango text-3xl md:text-6xl text-white mb-4 leading-tight"
            >
@@ -264,7 +350,7 @@ const Devis = () => {
                       <label className="flex items-center gap-2 text-[10px] md:text-sm font-bold mb-6 uppercase tracking-widest text-gray-400">
                         <Ruler className="w-4 h-4 text-eden-gold" /> Surface : <span className="text-eden-dark">{formData.surface} m²</span>
                       </label>
-                      <input 
+                      <input
                         type="range" min="10" max="2000" step="10"
                         value={formData.surface}
                         onChange={(e) => setFormData({...formData, surface: parseInt(e.target.value)})}
@@ -275,7 +361,7 @@ const Devis = () => {
                       <label className="flex items-center gap-2 text-[10px] md:text-sm font-bold mb-4 uppercase tracking-widest text-gray-400">
                         <MapPin className="w-4 h-4 text-eden-gold" /> Localisation
                       </label>
-                      <select 
+                      <select
                         className="w-full p-3 rounded-xl border border-gray-200 focus:border-eden-gold outline-none bg-white font-bold text-xs md:text-sm"
                         value={formData.localisation}
                         onChange={(e) => setFormData({...formData, localisation: e.target.value})}
@@ -288,15 +374,51 @@ const Devis = () => {
                       </select>
                     </div>
                   </div>
+
+                  {/* ─── Tertiaire & Bureaux : les locaux ─── */}
+                  {tertiaire && (
+                    <div className="bg-eden-gold/5 border border-eden-gold/30 p-4 md:p-6 rounded-2xl space-y-5">
+                      <p className="flex items-center gap-2 text-[10px] md:text-sm font-black uppercase tracking-widest text-eden-dark">
+                        <Building2 className="w-4 h-4 text-eden-gold" /> Vos locaux
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <ChampNombre label="Pièces / bureaux" requis placeholder="Ex. 8" valeur={formData.details.nombrePieces} onChange={(v) => majDetails('nombrePieces', v)} />
+                        <ChampNombre label="Postes de travail" placeholder="Ex. 25" valeur={formData.details.nombrePostes} onChange={(v) => majDetails('nombrePostes', v)} />
+                        <ChampNombre label="Toilettes" placeholder="Ex. 3" valeur={formData.details.nombreToilettes} onChange={(v) => majDetails('nombreToilettes', v)} />
+                      </div>
+                      <Choix label="Réfectoire ou espace de pause" options={OUI_NON} valeur={formData.details.refectoire} onChange={(v) => majDetails('refectoire', v)} />
+                    </div>
+                  )}
+
+                  {/* ─── Services Particuliers : le logement ─── */}
+                  {particulier && (
+                    <div className="bg-eden-gold/5 border border-eden-gold/30 p-4 md:p-6 rounded-2xl space-y-5">
+                      <p className="flex items-center gap-2 text-[10px] md:text-sm font-black uppercase tracking-widest text-eden-dark">
+                        <Home className="w-4 h-4 text-eden-gold" /> Votre logement
+                      </p>
+                      <Choix label="Type de logement" options={TYPES_LOGEMENT} valeur={formData.details.typeLogement} onChange={(v) => majDetails('typeLogement', v)} />
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <ChampNombre label="Nombre de pièces" requis placeholder="Ex. 4" valeur={formData.details.nombrePieces} onChange={(v) => majDetails('nombrePieces', v)} />
+                        <ChampNombre label="Salles de bain" placeholder="Ex. 1" valeur={formData.details.nombreSallesDeBain} onChange={(v) => majDetails('nombreSallesDeBain', v)} />
+                        <ChampNombre label="Toilettes" placeholder="Ex. 1" valeur={formData.details.nombreToilettes} onChange={(v) => majDetails('nombreToilettes', v)} />
+                      </div>
+                      <Choix label="Animaux de compagnie" options={OUI_NON} valeur={formData.details.animaux} onChange={(v) => majDetails('animaux', v)} />
+                      <Choix label="Prestation souhaitée" options={PRESTATIONS_PARTICULIER} valeur={formData.details.prestation} onChange={(v) => majDetails('prestation', v)} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col-reverse sm:flex-row justify-between gap-4 pt-4">
                   <button type="button" onClick={() => setStep(1)} className="text-gray-400 font-bold hover:text-eden-dark flex items-center justify-center gap-2 py-2">
                     <ArrowLeft className="w-4 h-4" /> Retour
                   </button>
-                  {/* MODIFIÉ : On utilise handleAuthRedirection ici */}
-                  <button type="button" onClick={handleAuthRedirection} disabled={!formData.localisation} className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 transition-all w-full sm:w-auto">
-                    Continuer
-                  </button>
+                  <div className="flex flex-col items-stretch sm:items-end gap-2">
+                    {!piecesOk && formData.localisation ? (
+                      <p className="text-[11px] text-red-500 font-bold text-center sm:text-right">Indiquez le nombre de pièces pour continuer.</p>
+                    ) : null}
+                    <button type="button" onClick={handleAuthRedirection} disabled={!etape2Valide} className="px-10 py-4 bg-eden-dark text-white rounded-xl font-bold hover:bg-eden-gold disabled:opacity-30 transition-all w-full sm:w-auto">
+                      Continuer
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -304,7 +426,7 @@ const Devis = () => {
             {step === 3 && (
               <motion.div key="step3" {...stepVariants} className="space-y-6 md:space-y-8">
                 <h2 className="font-black-mango text-xl md:text-2xl text-center">Disponibilités & Contact</h2>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   <div className="space-y-4">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400 text-center block">Choisir un créneau d'estimation</label>
@@ -332,16 +454,16 @@ const Devis = () => {
                     </div>
 
                     <div className="space-y-4">
-                      <input 
-                        type="email" placeholder="Email de contact" 
-                        disabled={!!user} 
-                        className={`w-full p-4 rounded-xl border border-gray-200 focus:border-eden-gold outline-none transition-all text-sm ${user ? 'bg-gray-100 text-gray-500' : 'bg-gray-50'}`} 
-                        value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                      <input
+                        type="email" placeholder="Email de contact"
+                        disabled={!!user}
+                        className={`w-full p-4 rounded-xl border border-gray-200 focus:border-eden-gold outline-none transition-all text-sm ${user ? 'bg-gray-100 text-gray-500' : 'bg-gray-50'}`}
+                        value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}
                       />
-                      <textarea 
-                        placeholder="Détails supplémentaires..." 
-                        className="w-full p-4 rounded-xl border border-gray-200 focus:border-eden-gold outline-none bg-gray-50 h-24 text-sm" 
-                        value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})} 
+                      <textarea
+                        placeholder="Détails supplémentaires (accès, horaires, contraintes…)"
+                        className="w-full p-4 rounded-xl border border-gray-200 focus:border-eden-gold outline-none bg-gray-50 h-24 text-sm"
+                        value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})}
                       />
                     </div>
                   </div>
@@ -351,10 +473,10 @@ const Devis = () => {
                   <button type="button" onClick={prevStep} className="text-gray-400 font-bold hover:text-eden-dark flex items-center justify-center gap-2 py-2">
                     <ArrowLeft className="w-4 h-4" /> Retour
                   </button>
-                  <button 
-                    type="submit" 
-                    onClick={handlePreSubmit} 
-                    disabled={isSubmitting || !selectedDate || !formData.email} 
+                  <button
+                    type="submit"
+                    onClick={handlePreSubmit}
+                    disabled={isSubmitting || !selectedDate || !formData.email}
                     className="flex items-center justify-center gap-3 px-10 py-4 bg-eden-gold text-white rounded-xl font-bold shadow-lg hover:shadow-eden-gold/40 transition-all transform hover:scale-105 disabled:opacity-50 w-full sm:w-auto"
                   >
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

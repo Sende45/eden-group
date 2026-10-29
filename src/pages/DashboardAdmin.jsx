@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../context/AuthContext';
+import { lignesDetails, titreDetails } from '../utils/detailsDevis';
 
 export default function DashboardAdmin() {
     const { userData, logout } = useAuth();
@@ -449,6 +450,26 @@ export default function DashboardAdmin() {
                                                 <div className="flex flex-col"><span className="text-[7px] uppercase text-gray-400 font-black">Surface</span><span className="text-[10px] font-bold">{d.surface} m²</span></div>
                                                 <div className="flex flex-col"><span className="text-[7px] uppercase text-gray-400 font-black">Fréquence</span><span className="text-[10px] font-bold capitalize">{d.frequence}</span></div>
                                             </div>
+                                            {/* Les locaux / Le logement (Tertiaire & Particuliers) */}
+                                            {lignesDetails(d).length > 0 && (
+                                                <div className="mb-4 bg-white/50 p-3 rounded-2xl border border-gray-50">
+                                                    <p className="text-[7px] uppercase text-eden-gold font-black mb-2">{titreDetails(d.pole)}</p>
+                                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                                                        {lignesDetails(d).map(([libelle, valeur]) => (
+                                                            <div key={libelle} className="flex flex-col">
+                                                                <span className="text-[7px] uppercase text-gray-400 font-black">{libelle}</span>
+                                                                <span className="text-[10px] font-bold">{valeur}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {d.message && (
+                                                <div className="mb-4 bg-white/50 p-3 rounded-2xl border border-gray-50">
+                                                    <p className="text-[7px] uppercase text-gray-400 font-black mb-1">Précisions du client</p>
+                                                    <p className="text-[10px] text-gray-600 leading-snug whitespace-pre-line break-words">{d.message}</p>
+                                                </div>
+                                            )}
                                             {d.appointmentDate && (
                                                 <div className="mb-4 p-2 bg-eden-dark text-white rounded-xl text-center"><p className="text-[9px] font-black uppercase">📅 RDV ESTIMATION : {d.appointmentDate.toDate().toLocaleString('fr-FR')}</p></div>
                                             )}
