@@ -15,6 +15,20 @@ service cloud.firestore {
       );
     }
 
+    // Le client répond à un devis chiffré qui lui appartient : accepter OU refuser, rien d'autre
+    function estReponseClientDevis() {
+      let avant = resource.data;
+      let apres = request.resource.data;
+      let champs = apres.diff(avant).affectedKeys();
+      return isSignedIn()
+        && avant.userId == request.auth.uid
+        && avant.status == 'valide'
+        && (
+          (apres.status == 'client_valide' && champs.hasOnly(['status', 'confirmedAt']))
+          || (apres.status == 'client_refuse' && champs.hasOnly(['status', 'refusedAt', 'motifRefusClient']))
+        );
+    }
+
     // 1. Profils utilisateurs
     match /users/{userId} {
       allow read: if isSignedIn(); // l'admin doit pouvoir lister les utilisateurs
@@ -43,15 +57,8 @@ service cloud.firestore {
       // Lecture : l'admin, ou le client à qui appartient le devis (Historique)
       allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // Le client peut UNIQUEMENT confirmer un devis chiffré qui lui appartient :
-      // statut "valide" → "client_valide", sans toucher au prix ni au reste.
-      allow update: if isAdmin() || (
-        isSignedIn()
-        && resource.data.userId == request.auth.uid
-        && resource.data.status == 'valide'
-        && request.resource.data.status == 'client_valide'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'confirmedAt'])
-      );
+      // Modification : l'admin, ou la réponse du client (accepter / refuser)
+      allow update: if isAdmin() || estReponseClientDevis();
     }
 
     // 5. Avis clients (page d'accueil)
